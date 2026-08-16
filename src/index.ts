@@ -1,5 +1,5 @@
 /**
- * One-plugin entry to the WorkBuddy-style layered file memory: global snapshot injection, session
+ * One-plugin entry to the layered file memory: global snapshot injection, session
  * recall, post-compaction flush, and the bundled usage skill.
  * @module dsh-memory
  */

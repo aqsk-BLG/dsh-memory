@@ -1,5 +1,5 @@
 /**
- * Post-compaction memory flush. After a successful `compaction/end`, queues one WorkBuddy-style
+ * Post-compaction memory flush. After a successful `compaction/end`, queues one
  * reminder on the owning agent's inbox.
  * @module dsh-memory/flush
  */
@@ -9,7 +9,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-compaction'
 import type {} from '@deepseek-ai/dsh-agent'
 
-/** The fixed model-facing reminder text, WorkBuddy-style. */
+/** The fixed model-facing reminder text. */
 export const FLUSH_REMINDER = [
   'The conversation was just compacted. Before continuing, persist anything important that is not',
   'yet saved: update $DSH_HOME/MEMORY.md for durable global facts or mandatory rules, and append',

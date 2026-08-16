@@ -1,7 +1,7 @@
 {
   "name": "dsh-memory",
   "version": "0.1.0",
-  "description": "WorkBuddy-style layered file memory for DeepSeek Harness: global snapshot injection, workspace notes, session recall, post-compaction flush, and a bundled usage skill",
+  "description": "Layered file memory for DeepSeek Harness: global snapshot injection, workspace notes, session recall, post-compaction flush, and a bundled usage skill",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

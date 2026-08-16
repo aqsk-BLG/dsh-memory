@@ -1,6 +1,8 @@
 # dsh-memory
 
-WorkBuddy-style layered file memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — one plugin row that brings global snapshot injection, workspace notes, session recall, post-compaction flush, and a bundled usage skill.
+Layered file memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — one plugin row that brings global snapshot injection, workspace notes, session recall, post-compaction flush, and a bundled usage skill.
+
+The design was informed by a survey of memory systems across the agent ecosystem (OpenClaw, Hermes, Codex, WorkBuddy, and others) and follows the file-first doctrine they share: memory is plain files on disk, a small curated layer is always in context, and detail lives in a deep layer reached on demand.
 
 ## What you get
 
@@ -72,7 +74,7 @@ Tell the agent to remember something; in the next session the snapshot is inject
 
 ## Upstream
 
-This package is a standalone distribution of `packages/memory/*` from [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT). The bundled skill text is an original rewrite of the file-memory conventions popularized by WorkBuddy; no third-party source is included. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+This package is a standalone distribution of `packages/memory/*` from [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT). The bundled skill text is an original rewrite of the file-memory conventions shared across the agent ecosystem; no third-party source is included. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 
