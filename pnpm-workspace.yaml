@@ -1,0 +1,8 @@
+# The @deepseek-ai/* peer dependencies are provided by the DeepSeek Harness
+# installation at runtime; never auto-install them from the npm registry.
+# (pnpm ≥10 reads settings from this file, not .npmrc.)
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false

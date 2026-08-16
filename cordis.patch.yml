@@ -1,0 +1,11 @@
+# The layer this bundle contributes: one row mounting the memory plugin.
+# Users may override any key in their profile's cordis.patch.yml without touching this file.
+
+- insert:
+    - id: memory
+      name: dsh-memory
+      config:
+        memoryBudgetChars: 4000
+        userBudgetChars: 1500
+        maxHits: 20
+        flushEnabled: true
