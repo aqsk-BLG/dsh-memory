@@ -1,0 +1,73 @@
+{
+  "name": "dsh-memory",
+  "version": "1.0.0",
+  "description": "Native layered memory for DeepSeek Harness with persona files, workspace scope, semantic recall, and background consolidation",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "src/**/*.ts",
+    "scripts/check-bounded-file.mjs",
+    "scripts/check-bundle.mjs",
+    "scripts/check-consolidation-policy.mjs",
+    "scripts/check-ranking-policy.mjs",
+    "scripts/check-ranking-output.mjs",
+    "tsdown.config.ts",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md",
+    "README.zh.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck:policies": "tsc --noEmit --allowImportingTsExtensions --module esnext --moduleResolution bundler --target es2024 --types node src/bounded-file.ts src/consolidation-policy.ts src/ranking-output.ts src/ranking-policy.ts",
+    "check": "pnpm run typecheck:policies && pnpm run build && node scripts/check-bundle.mjs && node scripts/check-bounded-file.mjs && node scripts/check-ranking-output.mjs && node scripts/check-ranking-policy.mjs && node scripts/check-consolidation-policy.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aqsk-BLG/dsh-memory.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "memory",
+    "agent-memory",
+    "cordis"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-atomic-write": "*",
+    "@deepseek-ai/dsh-compaction": "*",
+    "@deepseek-ai/dsh-home-paths": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-session-query": "*",
+    "@deepseek-ai/dsh-skill": "*",
+    "@deepseek-ai/dsh-system-prompt": "*",
+    "@deepseek-ai/dsh-timeout": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-workspace": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsdown": "^0.16.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  }
+}
