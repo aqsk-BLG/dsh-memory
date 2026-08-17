@@ -2,7 +2,7 @@
 
 The plugin source is a standalone distribution of the layered file memory
 developed in the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-repository (`packages/memory/*`), licensed under the MIT License:
+repository (`packages/memory/*` and `packages/identity/persona-files`), licensed under the MIT License:
 
 ```
 MIT License

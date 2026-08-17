@@ -1,7 +1,7 @@
 {
   "name": "dsh-memory",
-  "version": "0.1.0",
-  "description": "Layered file memory for DeepSeek Harness: global snapshot injection, workspace notes, session recall, post-compaction flush, and a bundled usage skill",
+  "version": "0.2.0",
+  "description": "Native layered memory for DeepSeek Harness with persona files, workspace scope, semantic recall, and background consolidation",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -10,12 +10,18 @@
   },
   "files": [
     "lib/index.js",
+    "src/**/*.ts",
+    "scripts/check-bundle.mjs",
+    "tsdown.config.ts",
     "cordis.patch.yml",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "README.zh.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "prepare": "tsdown"
+    "build": "tsdown",
+    "check": "pnpm run build && node scripts/check-bundle.mjs"
   },
   "license": "MIT",
   "repository": {
@@ -34,6 +40,7 @@
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/schemastery": "*",
     "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-atomic-write": "*",
     "@deepseek-ai/dsh-compaction": "*",
     "@deepseek-ai/dsh-home-paths": "*",
     "@deepseek-ai/dsh-llm": "*",
@@ -41,7 +48,9 @@
     "@deepseek-ai/dsh-session-query": "*",
     "@deepseek-ai/dsh-skill": "*",
     "@deepseek-ai/dsh-system-prompt": "*",
-    "@deepseek-ai/dsh-tools": "*"
+    "@deepseek-ai/dsh-timeout": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-workspace": "*"
   },
   "dsh": {
     "bundle": {

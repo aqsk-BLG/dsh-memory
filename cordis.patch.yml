@@ -1,11 +1,13 @@
-# The layer this bundle contributes: one row mounting the memory plugin.
-# Users may override any key in their profile's cordis.patch.yml without touching this file.
+# Standalone layered memory. Installing this bundle into a profile
+# activates one facade row and the durable session index its recall tool uses.
+# The profile and home patch layers still apply afterwards and may override
+# either row without editing the package.
+
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query.sqlite')
+    openAt: first-search
 
 - insert:
     - id: memory
       name: dsh-memory
-      config:
-        memoryBudgetChars: 4000
-        userBudgetChars: 1500
-        maxHits: 20
-        flushEnabled: true
