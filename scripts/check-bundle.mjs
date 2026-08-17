@@ -9,6 +9,7 @@ const required = [
   'memory/consolidation-request',
   'dsh-memory-consolidator:start',
   'automatic deletion guard blocked removal',
+  'safe additions while retaining guarded entries',
   'managed region repair is required',
   'semantic ranking tournament made no progress',
 ]

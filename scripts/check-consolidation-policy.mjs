@@ -5,6 +5,7 @@ import {
   consolidationRetryDelay,
   dailyReviewMarker,
   deletionGuard,
+  planManagedRewrite,
   shouldBlockConsolidationRetry,
 } from '../src/consolidation-policy.ts'
 
@@ -27,6 +28,22 @@ assert.equal(deletionGuard(['one', 'two'], ['one'], 0.5, false).blocked, false)
 assert.equal(deletionGuard(['one', 'two', 'three'], ['one'], 0.5, false).blocked, true)
 assert.equal(deletionGuard(['one'], [], 0.5, false).blocked, true)
 assert.equal(deletionGuard(['one'], [], 0.5, true).blocked, false)
+
+const guardedRewrite = planManagedRewrite(
+  ['keep', 'old-one', 'old-two'],
+  ['KEEP', 'new-entry'],
+  0.5,
+  false,
+)
+assert.equal(guardedRewrite.blocked, true)
+assert.deepEqual(guardedRewrite.diff.added, ['new-entry'])
+assert.deepEqual(guardedRewrite.entries, ['keep', 'old-one', 'old-two', 'new-entry'])
+assert.deepEqual(planManagedRewrite(['one', 'two'], ['one'], 0.5, false).entries, ['one'])
+assert.deepEqual(planManagedRewrite(['one'], [], 0.5, true).entries, [])
+assert.equal(advancesConsolidationWatermark({
+  status: 'proposed',
+  outcomes: [{ status: 'proposed' }],
+}), true)
 
 assert.equal(consolidationRetryDelay(1, 1_000, 8_000), 1_000)
 assert.equal(consolidationRetryDelay(4, 1_000, 8_000), 8_000)

@@ -6,19 +6,25 @@ An installable DSH profile bundle for WorkBuddy-style layered memory: global per
 
 ## Install or remove
 
-Install the Git bundle into a profile:
+The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-dsh plugin --profile web add github:aqsk-BLG/dsh-memory
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.0.1
+pnpm dsh --profile web --dump-config
+pnpm dsh web
 ```
 
-For a reproducible deployment, pin the repository to a commit:
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+
+`dsh plugin` updates only the existing profile's dependency metadata, lockfile, installed modules, and `dsh.profile.bundles` list. It does not modify the DSH source tree, create another agent or workspace, or reset existing sessions, models, settings, storage, or workspace registrations. The bundle also leaves `dshHome` unset, so the plugin uses the exact same single data root as the DSH instance: inherited `$DSH_HOME`, or DSH's own `~/.dsh` default only when that variable is unset. It never opens both roots.
+
+The bundle inserts the `memory` row and enables the session-query index at `$DSH_HOME/session-query.sqlite`; later profile and home patches may override either row. The repository commits its built `lib/index.js`, so installation does not need a dependency lifecycle build. Remove both the dependency and layer, then restart DSH, with:
 
 ```sh
-dsh plugin --profile web add github:aqsk-BLG/dsh-memory#<commit>
+pnpm dsh plugin --profile web remove dsh-memory
 ```
 
-`dsh plugin` records the dependency and appends this package to the profile's `dsh.profile.bundles` list. The bundle inserts the `memory` row and enables the session-query index at `$DSH_HOME/session-query.sqlite`; later profile and home patches may override either row. The repository commits its built `lib/index.js`, so installation does not need a dependency lifecycle build. Remove both the dependency and layer with `dsh plugin --profile web remove dsh-memory`.
+The public repository is discoverable through GitHub's [`dsh-plugin` topic](https://github.com/topics/dsh-plugin).
 
 ## What it does
 
@@ -26,7 +32,7 @@ Mounting the bundle composes five bundled capabilities and the guide:
 
 - **Persona files** — seeds and injects frozen `$DSH_HOME/IDENTITY.md` and `$DSH_HOME/SOUL.md` snapshots, logged as `persona/bootstrap`.
 - **Memory bootstrap** — injects frozen global `USER.md` and `MEMORY.md`, live project `MEMORY.md`, and a lightweight every-turn reminder that skips greetings, simple lookups, and short Q&A.
-- **Background consolidator** — reviews completed substantive turns, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. Retryable mixed results retain their watermark; malformed regions wait for repair, while transient failures back off.
+- **Background consolidator** — reviews completed substantive turns, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. A guarded destructive rewrite retains old entries while applying bounded safe additions; retryable mixed results retain their watermark, malformed regions wait for repair, and transient failures back off.
 - **Hybrid session search** — semantically ranks bounded past-session surfaces when a model route is available, accepts legitimate empty shards in large tournaments, and provides an explicitly labeled full-text fallback.
 - **Compaction flush** — queues a post-compaction reminder to persist important context at the permitted memory layer.
 - A bundled `memory` runtime skill — explains file roles, what to record and skip, append-only daily logs, semantic recall, and the 30-day distillation rule. A project or preset may override it with a same-named skill.
@@ -43,7 +49,7 @@ A session with no matching membership — including the Web UI's Ungrouped group
 
 | Key | Default | Meaning |
 |---|---|---|
-| `dshHome` | `$DSH_HOME` or `~/.dsh` | Directory containing persona and global memory files |
+| `dshHome` | unset | Advanced explicit override only. Normally omit it so the plugin uses the same root already selected by DSH: `$DSH_HOME`, otherwise DSH's default `~/.dsh` |
 | `memoryBudgetChars` | `4000` | Code-point budget for global `MEMORY.md` |
 | `userBudgetChars` | `1500` | Code-point budget for global `USER.md` |
 | `projectMemoryBudgetChars` | `3000` | Code-point budget for live project `MEMORY.md` |
@@ -84,7 +90,6 @@ For a raw Cordis composition rather than a profile bundle:
 ```yaml
 - name: dsh-memory
   config:
-    dshHome: ~
     reminderEnabled: true
     semanticEnabled: true
     flushEnabled: true
@@ -124,7 +129,7 @@ This package is a standalone distribution of `packages/memory/*` and `packages/i
 - **No daily-log injection** — dated project history remains on-demand even though curated project memory is live.
 - **No historical daily-log distillation yet** — the background consolidator reviews newly completed turns; 30-day daily-log distillation remains a manual maintenance rule.
 - **Proposal mode is inspection-only** — there is no later approve/apply command or UI.
-- **Deletion guard proposals require manual follow-up** — an unexpectedly destructive complete-list result is retained in session events but is not written automatically.
+- **Deletion guard proposals require manual follow-up** — in automatic mode, bounded safe additions are written while guarded old entries are retained; the rejected complete list remains in session events. If retaining old entries plus every addition would exceed the target budget, nothing is written and the proposal remains inspection-only.
 - **Provider-visible semantic candidates** — semantic recall sends bounded past-session excerpts to the selected model provider; disable it for local full-text-only recall.
 - **No cross-device corpus or cloud sync** — session discovery and full-text fallback use the composed DSH session-query store; cloud synchronization remains an optional future layer.
 
