@@ -104,8 +104,8 @@ You have a layered file memory.
   curated MEMORY.md; daily logs remain on-demand. Ungrouped and global-only sessions have no
   project-memory layer; never infer one from cwd or scan other registered workspaces.
 - Layer 3 is the session_search tool: self-contained queries over past session transcripts.
-- After eligible completed turns, the background consolidator updates only its controlled regions;
-  greetings and short Q&A do not trigger it.
+- After each eligible completed task becomes idle, the background consolidator updates only its
+  controlled regions; greetings and short Q&A do not trigger it.
 
 Before your first memory read or write, load the memory skill for the complete usage guide
 (what to record, what to skip, and the 30-day maintenance rule).`
@@ -195,7 +195,7 @@ function globalReminder(enabled: boolean): string[] {
     '',
     'MEMORY REMINDER',
     '- Skip memory writes for greetings, simple lookups, and short Q&A unless the user explicitly asks to remember a durable fact.',
-    '- Ordinary durable extraction is handled after the turn by the background consolidator; do not duplicate its managed-region writes.',
+    '- Each eligible completed task is reviewed after the turn by the background consolidator; do not duplicate its managed-region writes.',
     '- If the user directly asks for an immediate file edit, keep manual text outside the consolidator markers and use `$DSH_HOME/USER.md` or `$DSH_HOME/MEMORY.md`.',
     '- This session has no project-memory layer; never create one from cwd.',
   ]
@@ -212,7 +212,7 @@ function workspaceReminder(
     '',
     'MEMORY REMINDER',
     '- Skip memory writes for greetings, simple lookups, and short Q&A unless the user explicitly asks to remember a durable fact.',
-    `- Ordinary durable extraction and daily notes are handled after the turn by the background consolidator for ${JSON.stringify(dailyLogPattern)}.`,
+    `- Each eligible completed task is reviewed after the turn for durable extraction and daily notes in ${JSON.stringify(dailyLogPattern)}.`,
     `- If the user directly asks for an immediate file edit, keep manual text outside the consolidator markers; use ${JSON.stringify(curatedMemoryFile)} for project facts and \`$DSH_HOME/MEMORY.md\` for cross-project facts.`,
   ]
 }

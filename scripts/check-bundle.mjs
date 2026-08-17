@@ -7,6 +7,8 @@ const required = [
   'session_search',
   'semantic ranking output contains unsupported block type',
   'memory/consolidation-request',
+  'must each be exactly {"add":[],"remove":[]}',
+  'selected model route advertises no default output limit',
   'dsh-memory-consolidator:start',
   'automatic deletion guard blocked removal',
   'safe additions while retaining guarded entries',
@@ -22,6 +24,10 @@ for (const marker of required) {
 
 if (bundle.includes('semantic ranking output must contain text only')) {
   throw new Error('built bundle still rejects valid reasoning-capable ranker responses')
+}
+if (bundle.includes('DEFAULT_MAX_TOKENS = 8192')
+  || bundle.includes("DEFAULT_REASONING_EFFORT = 'off'")) {
+  throw new Error('built bundle still imposes fixed background-review generation controls')
 }
 
 const forbiddenInternalImports = [

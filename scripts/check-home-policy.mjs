@@ -17,6 +17,16 @@ if (/^\s*dshHome\s*:/mu.test(patch)) {
 if (!facade.includes('dshHome?: string') || facade.includes('dshHome: z.string().required()')) {
   throw new Error('facade dshHome must remain optional')
 }
+if (consolidator.includes('DEFAULT_REASONING_EFFORT')
+  || consolidator.includes('DEFAULT_MAX_TOKENS')
+  || facade.includes('.default(MemoryConsolidator.DEFAULT_REASONING_EFFORT)')
+  || facade.includes('.default(MemoryConsolidator.DEFAULT_MAX_TOKENS)')) {
+  throw new Error('background consolidation must not invent fixed reasoning or output-token defaults')
+}
+if (!consolidator.includes('llm.prepareCall(reviewCallConfig')
+  || !consolidator.includes('adapter-resolved')) {
+  throw new Error('background consolidation must resolve generation controls from the selected route')
+}
 for (const [name, source] of [['bootstrap', bootstrap], ['persona', persona], ['consolidator', consolidator]]) {
   if (!source.includes('resolveDshHome(config.dshHome)')) {
     throw new Error(`${name} no longer delegates omitted dshHome to the shared DSH resolver`)
