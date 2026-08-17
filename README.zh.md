@@ -6,19 +6,25 @@
 
 ## 安装或移除
 
-把 Git bundle 安装到 profile：
+预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-dsh plugin --profile web add github:aqsk-BLG/dsh-memory
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.0.1
+pnpm dsh --profile web --dump-config
+pnpm dsh web
 ```
 
-需要可复现部署时固定到具体 commit：
+若希望跟随仓库最新提交，可去掉 `#v1.0.1`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+
+`dsh plugin` 只更新现有 profile 的依赖元数据、锁文件、已安装模块和 `dsh.profile.bundles` 列表。它不会修改 DSH 源码，不会另建智能体或工作区，也不会重置已有会话、模型、设置、存储或工作区注册。bundle 同样不会设置 `dshHome`，因此插件与当前 DSH 实例始终使用同一个数据根：优先继承 `$DSH_HOME`；仅当该变量未设置时，才与 DSH 一起使用其默认的 `~/.dsh`。它不会同时打开两个根目录。
+
+bundle 会插入 `memory` 行，并在 `$DSH_HOME/session-query.sqlite` 启用会话查询索引；后续 profile 与 home patch 仍可覆盖这两行。仓库已提交构建好的 `lib/index.js`，安装时无需运行依赖生命周期构建。卸载依赖和配置层后重启 DSH：
 
 ```sh
-dsh plugin --profile web add github:aqsk-BLG/dsh-memory#<commit>
+pnpm dsh plugin --profile web remove dsh-memory
 ```
 
-`dsh plugin` 会记录依赖，并把本包追加到 profile 的 `dsh.profile.bundles` 列表。bundle 插入 `memory` 行，并在 `$DSH_HOME/session-query.sqlite` 启用会话查询索引；后续 profile 与 home patch 仍可覆盖这两行。仓库已提交构建好的 `lib/index.js`，安装时无需运行依赖生命周期构建。运行 `dsh plugin --profile web remove dsh-memory` 会同时移除依赖和配置层。
+公开仓库可从 GitHub 的 [`dsh-plugin` topic](https://github.com/topics/dsh-plugin)发现。
 
 ## 功能
 
@@ -26,7 +32,7 @@ dsh plugin --profile web add github:aqsk-BLG/dsh-memory#<commit>
 
 - **人格文件**：初始化并注入冻结的 `$DSH_HOME/IDENTITY.md` 与 `$DSH_HOME/SOUL.md` 快照，记录为 `persona/bootstrap`。
 - **记忆 bootstrap**：注入冻结的全局 `USER.md` 与 `MEMORY.md`、实时项目 `MEMORY.md`，以及轻量每轮提醒；提醒会跳过问候、简单查询和短问答。
-- **后台记忆巩固器**：审核已完成的实质轮次，通过冲突检查写入有界受管区块，并且只为仍然绑定的工作区幂等追加每日日志。可重试的混合结果不会推进水位线；畸形受管区等待修复，瞬时失败采用退避。
+- **后台记忆巩固器**：审核已完成的实质轮次，通过冲突检查写入有界受管区块，并且只为仍然绑定的工作区幂等追加每日日志。破坏性重写被守卫拦截时，会保留旧条目并写入预算内的安全新增项；可重试的混合结果不会推进水位线，畸形受管区等待修复，瞬时失败采用退避。
 - **混合会话搜索**：有模型路由时对有界既往会话 surface 进行语义排序，大型锦标赛允许合法空分片，并提供明确标注的全文回退。
 - **压缩后 flush**：压缩后排入提醒，把重要上下文写入当前允许的记忆层。
 - 随包的 `memory` runtime skill：说明文件职责、该记录和跳过什么、仅追加每日日志、语义回忆与 30 天蒸馏规则。项目或 preset 可用同名 skill 覆盖它。
@@ -43,7 +49,7 @@ dsh plugin --profile web add github:aqsk-BLG/dsh-memory#<commit>
 
 | 键 | 默认值 | 含义 |
 |---|---|---|
-| `dshHome` | `$DSH_HOME` 或 `~/.dsh` | 存放人格与全局记忆文件的目录 |
+| `dshHome` | 不设置 | 仅供高级显式覆盖。通常必须留空，使插件沿用 DSH 已选择的同一个根：优先 `$DSH_HOME`，否则才是 DSH 默认的 `~/.dsh` |
 | `memoryBudgetChars` | `4000` | 全局 `MEMORY.md` 的码点预算 |
 | `userBudgetChars` | `1500` | 全局 `USER.md` 的码点预算 |
 | `projectMemoryBudgetChars` | `3000` | 实时项目 `MEMORY.md` 的码点预算 |
@@ -84,7 +90,6 @@ dsh plugin --profile web add github:aqsk-BLG/dsh-memory#<commit>
 ```yaml
 - name: dsh-memory
   config:
-    dshHome: ~
     reminderEnabled: true
     semanticEnabled: true
     flushEnabled: true
@@ -124,7 +129,7 @@ dsh plugin --profile web add github:aqsk-BLG/dsh-memory#<commit>
 - **不注入每日日志**：即使项目长期记忆保持实时，带日期的项目历史仍按需读取。
 - **尚无历史每日日志蒸馏**：后台整理器审核新完成的轮次；30 天每日日志蒸馏仍是手动维护规则。
 - **Proposal 模式仅供检查**：没有稍后 approve／apply 的命令或 UI。
-- **删除保护产生的 proposal 需人工处理**：意外的大规模 complete-list 删除会保留在会话事件中，但不会自动写入文件。
+- **删除保护产生的 proposal 需人工处理**：automatic 模式会写入预算内的安全新增项，同时保留被保护的旧条目；遭拒的完整列表仍保存在会话事件中。若“保留旧条目＋全部新增项”会超过目标预算，则不写文件，proposal 仅供检查。
 - **语义候选对 provider 可见**：语义回忆会把有界既往会话片段发送给所选模型 provider；若只需本地全文回忆，请关闭该功能。
 - **没有跨设备语料或云同步**：会话发现与全文回退使用已组合的 DSH session-query 存储；云同步仍是可选未来层。
 

@@ -35,9 +35,18 @@ import {
   DEFAULT_MAX_DELETION_RATIO,
   DEFAULT_RETRY_BASE_DELAY_MS,
   DEFAULT_RETRY_MAX_DELAY_MS,
-  deletionGuard,
+  planManagedRewrite,
   shouldBlockConsolidationRetry,
 } from './consolidation-policy.ts'
+import { collectEligibleTurns, type ConsolidationTurn } from './eligible-turns.ts'
+import {
+  inspectManagedRegion,
+  managedRegionCodePoints,
+  MANAGED_REGION_END,
+  MANAGED_REGION_HEADING,
+  MANAGED_REGION_START,
+  rewriteManagedRegion,
+} from './managed-region.ts'
 // Type-only: declares the live agent registry and lifecycle events.
 import type {} from '@deepseek-ai/dsh-agent'
 // The event declarations live in src/consolidator-types.ts; this re-export keeps their augmentation visible.
@@ -59,12 +68,15 @@ export const name = 'memory-consolidator'
 /** The live agent registry is the authority for lifecycle and commit liveness. */
 export const inject = ['agents']
 
-/** Marker opening the only curated-file region this plugin owns. */
-export const MANAGED_REGION_START = '<!-- dsh-memory-consolidator:start -->'
-/** Marker closing the only curated-file region this plugin owns. */
-export const MANAGED_REGION_END = '<!-- dsh-memory-consolidator:end -->'
-/** Heading introduced when a file first receives a managed region. */
-export const MANAGED_REGION_HEADING = '## Consolidated memory'
+export { collectEligibleTurns } from './eligible-turns.ts'
+export type { ConsolidationTurn } from './eligible-turns.ts'
+export {
+  inspectManagedRegion,
+  MANAGED_REGION_END,
+  MANAGED_REGION_HEADING,
+  MANAGED_REGION_START,
+  rewriteManagedRegion,
+} from './managed-region.ts'
 /** Capability-owned timeout code for auxiliary reviews. */
 export const MEMORY_CONSOLIDATION_TIMEOUT_CODE = 'MEMORY_CONSOLIDATION_TIMEOUT'
 
@@ -156,36 +168,6 @@ export const Config: z<Config> = z.object({
   model: z.string().default(''),
 })
 
-/** One eligible completed turn represented to the reviewer. */
-export interface ConsolidationTurn {
-  turn: number
-  startSeq: number
-  endSeq: number
-  sourceEventSeqs: number[]
-  user: string
-  assistant: string
-  toolNames: string[]
-  toolResults: string
-  explicitRemember: boolean
-  explicitForget: boolean
-}
-
-interface OpenTurn {
-  turn: number
-  startSeq: number
-  sourceEventSeqs: number[]
-  human: string[]
-  assistant: string[]
-  toolNames: string[]
-  toolResults: string[]
-  hasImage: boolean
-}
-
-interface ManagedInspection {
-  valid: boolean
-  entries: string[]
-}
-
 interface FileState extends MemoryConsolidationFileSnapshot {
   content: string
   managedEntries: string[]
@@ -231,10 +213,6 @@ const EMPTY_CANDIDATES = (): MemoryConsolidationCandidates => ({
   user: [], global: [], project: [], daily: [],
 })
 
-const GREETING_ONLY = /^(?:你(?:好|好呀|好啊)|您好|哈[喽啰罗]|嗨|早上好|上午好|中午好|下午好|晚上好|hello|hi|hey|good\s+(?:morning|afternoon|evening))[\s!！。.?？~～]*$/iu
-const EXPLICIT_REMEMBER = /(?:记住|记得|请记|别忘|写入记忆|保存(?:到|进)?记忆|remember\b|don['’]?t\s+forget\b|save\b.{0,20}\bmemory\b)/iu
-const EXPLICIT_FORGET = /(?:忘(?:掉|记)|删(?:除|掉).{0,30}记忆|从记忆中(?:删除|移除)|不要再记|清空.{0,20}记忆|forget\b|(?:remove|delete)\b.{0,30}\bmemory\b)/iu
-const NEGATED_FORGET = /(?:别忘|不要忘|don['’]?t\s+forget\b|do\s+not\s+forget\b)/iu
 const FORBIDDEN_INVISIBLE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200d\u2060\ufeff]/u
 const SECRET_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|token|password|secret)\s*[:=]\s*["']?[a-z0-9_+/.=-]{12,}/iu
 const SECRET_PREFIXES = [
@@ -317,145 +295,6 @@ export function validateConfig(config: Config): void {
   if ((config.provider.length === 0) !== (config.model.length === 0)) {
     throw new Error('memory-consolidator: provider and model must be configured together')
   }
-}
-
-/** Convert supported model-visible blocks to compact reviewer text. */
-function textFromBlocks(blocks: readonly { type: string; text?: string; content?: readonly unknown[] }[]): string {
-  const parts: string[] = []
-  for (const block of blocks) {
-    if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text)
-    else if (block.type === 'image') parts.push('[image]')
-    else if (block.type === 'tool-result' && Array.isArray(block.content)) {
-      parts.push(textFromBlocks(block.content as Array<{ type: string; text?: string; content?: readonly unknown[] }>))
-    }
-  }
-  return parts.filter(Boolean).join('\n').trim()
-}
-
-/** Whether one completed turn is substantive enough to count. */
-function eligibleTurn(open: OpenTurn, config: Pick<Config, 'minUserChars' | 'minAssistantChars'>): boolean {
-  const user = open.human.join('\n').trim()
-  const assistant = open.assistant.join('\n').trim()
-  if (EXPLICIT_REMEMBER.test(user)) return true
-  if (GREETING_ONLY.test(user)) return false
-  if (open.toolNames.length > 0) return true
-  if (open.hasImage) return true
-  return Array.from(user).length >= config.minUserChars
-    && Array.from(assistant).length >= config.minAssistantChars
-}
-
-function isExplicitForget(text: string): boolean {
-  return !NEGATED_FORGET.test(text) && EXPLICIT_FORGET.test(text)
-}
-
-/**
- * Derive eligible successful human turns after a durable consolidation boundary.
- * @param events - immutable session event snapshot.
- * @param afterSeq - last successful review boundary, exclusive.
- * @param config - deterministic short-turn thresholds.
- * @returns eligible turns in session order.
- */
-export function collectEligibleTurns(
-  events: readonly SessionEvent[],
-  afterSeq: number,
-  config: Pick<Config, 'minUserChars' | 'minAssistantChars'>,
-): ConsolidationTurn[] {
-  const turns: ConsolidationTurn[] = []
-  let open: OpenTurn | undefined
-  for (const event of events) {
-    if (event.type === 'turn/start') {
-      open = {
-        turn: event.data.turn,
-        startSeq: event.seq,
-        sourceEventSeqs: [event.seq],
-        human: [],
-        assistant: [],
-        toolNames: [],
-        toolResults: [],
-        hasImage: false,
-      }
-      continue
-    }
-    if (open === undefined) continue
-    if (event.type === 'user/message' && event.data.source.kind === 'user') {
-      open.sourceEventSeqs.push(event.seq)
-      open.human.push(textFromBlocks(event.data.content))
-      open.hasImage ||= event.data.content.some(block => block.type === 'image')
-    } else if (event.type === 'assistant/message' && event.data.turn === open.turn) {
-      open.sourceEventSeqs.push(event.seq)
-      open.assistant.push(textFromBlocks(event.data.message.content))
-    } else if (event.type === 'tool/call' && event.data.turn === open.turn) {
-      open.sourceEventSeqs.push(event.seq)
-      open.toolNames.push(event.data.name)
-    } else if (event.type === 'tool/result' && event.data.turn === open.turn) {
-      open.sourceEventSeqs.push(event.seq)
-      open.toolResults.push(textFromBlocks(event.data.message.content))
-    } else if (event.type === 'turn/end' && event.data.turn === open.turn) {
-      open.sourceEventSeqs.push(event.seq)
-      const successful = event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens'
-      if (successful && event.seq > afterSeq && open.human.length > 0 && eligibleTurn(open, config)) {
-        const user = open.human.filter(Boolean).join('\n').trim()
-        turns.push({
-          turn: open.turn,
-          startSeq: open.startSeq,
-          endSeq: event.seq,
-          sourceEventSeqs: [...open.sourceEventSeqs],
-          user,
-          assistant: open.assistant.filter(Boolean).join('\n').trim(),
-          toolNames: [...new Set(open.toolNames)],
-          toolResults: open.toolResults.filter(Boolean).join('\n').trim(),
-          explicitRemember: EXPLICIT_REMEMBER.test(user),
-          explicitForget: isExplicitForget(user),
-        })
-      }
-      open = undefined
-    }
-  }
-  return turns
-}
-
-/**
- * Inspect an owned region without interpreting manual text outside it.
- * @param content - complete curated-file text.
- * @returns marker validity and the parsed managed entries.
- */
-export function inspectManagedRegion(content: string): ManagedInspection {
-  const start = content.indexOf(MANAGED_REGION_START)
-  const end = content.indexOf(MANAGED_REGION_END)
-  const duplicateStart = start >= 0 && content.indexOf(MANAGED_REGION_START, start + MANAGED_REGION_START.length) >= 0
-  const duplicateEnd = end >= 0 && content.indexOf(MANAGED_REGION_END, end + MANAGED_REGION_END.length) >= 0
-  if (start < 0 && end < 0) return { valid: true, entries: [] }
-  if (start < 0 || end < 0 || duplicateStart || duplicateEnd || end < start) {
-    return { valid: false, entries: [] }
-  }
-  const inner = content.slice(start + MANAGED_REGION_START.length, end).trim()
-  if (inner.length === 0) return { valid: true, entries: [] }
-  const lines = inner.split(/\r?\n/u).filter(line => line.trim().length > 0)
-  if (lines.some(line => !line.startsWith('- ') || line.slice(2).trim().length === 0)) {
-    return { valid: false, entries: [] }
-  }
-  return { valid: true, entries: lines.map(line => line.slice(2).trim()) }
-}
-
-/**
- * Replace only the owned region, or append it after manual content when first needed.
- * @param content - complete curated-file text.
- * @param entries - complete desired managed entry list.
- * @returns updated text with manual content preserved byte-for-byte outside the managed region.
- */
-export function rewriteManagedRegion(content: string, entries: readonly string[]): string {
-  const inspection = inspectManagedRegion(content)
-  if (!inspection.valid) throw new Error('managed region is malformed or duplicated')
-  const start = content.indexOf(MANAGED_REGION_START)
-  const body = entries.map(entry => `- ${entry}`).join('\n')
-  const region = `${MANAGED_REGION_START}\n${body}${body.length === 0 ? '' : '\n'}${MANAGED_REGION_END}`
-  if (start >= 0) {
-    const end = content.indexOf(MANAGED_REGION_END, start)
-    return content.slice(0, start) + region + content.slice(end + MANAGED_REGION_END.length)
-  }
-  if (entries.length === 0) return content
-  const prefix = content.length === 0 ? '' : `${content.replace(/\s+$/u, '')}\n\n`
-  return `${prefix}${MANAGED_REGION_HEADING}\n\n${region}\n`
 }
 
 /** Hash exact file or rejected model content without retaining another plaintext copy. */
@@ -578,13 +417,6 @@ function resolveRoute(agent: Agent, config: Config): MemoryConsolidationRoute {
   return { provider, model }
 }
 
-function outputBudget(entries: readonly string[]): number {
-  if (entries.length === 0) return 0
-  const body = entries.map(entry => `- ${entry}`).join('\n')
-  const region = `${MANAGED_REGION_START}\n${body}${body.length === 0 ? '' : '\n'}${MANAGED_REGION_END}`
-  return Array.from(region).length
-}
-
 function validatesEntry(value: unknown): value is string {
   return typeof value === 'string'
     && value.trim().length > 0
@@ -608,7 +440,7 @@ function normalizeEntries(value: unknown, key: string, budget: number): string[]
     seen.add(folded)
     entries.push(entry)
   }
-  if (outputBudget(entries) > budget) {
+  if (managedRegionCodePoints(entries) > budget) {
     throw new Error(`review output ${key} exceeds its ${budget}-character budget`)
   }
   return entries
@@ -762,21 +594,32 @@ async function commitFile(
       return outcome('skipped', 'workspace binding changed before commit')
     }
     if (!file.managedRegionValid) return outcome('failed', 'managed region is malformed or duplicated')
-    const entries = entriesFor(file.target, candidates)
-    const guard = file.target === 'daily'
+    let entries = entriesFor(file.target, candidates)
+    const plan = file.target === 'daily'
       ? undefined
-      : deletionGuard(file.managedEntries, entries, config.maxDeletionRatio, explicitForget)
-    if (guard !== undefined) {
+      : planManagedRewrite(file.managedEntries, entries, config.maxDeletionRatio, explicitForget)
+    let guardedDeletionReason: string | undefined
+    if (plan !== undefined) {
       diff = {
-        added: guard.diff.added.length,
-        kept: guard.diff.kept.length,
-        removed: guard.diff.removed.length,
+        added: plan.diff.added.length,
+        kept: plan.diff.kept.length,
+        removed: plan.diff.removed.length,
       }
-      if (guard.blocked) {
-        return outcome(
-          'proposed',
-          `automatic deletion guard blocked removal of ${guard.diff.removed.length}/${file.managedEntries.length} managed entries`,
-        )
+      if (plan.blocked) {
+        guardedDeletionReason = `automatic deletion guard blocked removal of ${plan.diff.removed.length}/${file.managedEntries.length} managed entries`
+        if (config.mode === 'proposal' || plan.diff.added.length === 0) {
+          return outcome('proposed', guardedDeletionReason)
+        }
+        const budget = file.target === 'user'
+          ? config.userBudgetChars
+          : file.target === 'global' ? config.globalBudgetChars : config.projectBudgetChars
+        if (managedRegionCodePoints(plan.entries) > budget) {
+          return outcome(
+            'proposed',
+            `${guardedDeletionReason}; ${plan.diff.added.length} safe additions were not written because retaining guarded entries would exceed the ${budget}-character budget`,
+          )
+        }
+        entries = plan.entries
       }
     }
     const dailySection = file.target === 'daily' ? dailyAppend(agent, throughSeq, entries, now) : ''
@@ -790,7 +633,11 @@ async function commitFile(
           dailySection,
         )
       : rewriteManagedRegion(file.content, entries)
-    if (next === file.content) return outcome('noop')
+    if (next === file.content) {
+      return guardedDeletionReason === undefined
+        ? outcome('noop')
+        : outcome('proposed', guardedDeletionReason)
+    }
     if (config.mode === 'proposal') return outcome('proposed')
 
     await mkdir(dirname(file.path), { recursive: true, mode: 0o700 })
@@ -804,7 +651,12 @@ async function commitFile(
         return outcome('conflict', 'file changed after the review snapshot')
       }
       await writeFileAtomic(file.path, next, { mode: 0o600, dirMode: 0o700 })
-      return outcome('applied')
+      return guardedDeletionReason === undefined
+        ? outcome('applied')
+        : outcome(
+            'proposed',
+            `${guardedDeletionReason}; applied ${plan?.diff.added.length ?? 0} safe additions while retaining guarded entries`,
+          )
     })
   } catch (error) {
     if (signal.aborted) throw error
@@ -939,10 +791,11 @@ async function consolidate(
   try {
     signal.throwIfAborted()
     const now = new Date()
-    snapshot = await reviewSnapshot(ctx, agent, home, now)
+    const currentSnapshot = await reviewSnapshot(ctx, agent, home, now)
+    snapshot = currentSnapshot
     signal.throwIfAborted()
-    if (retryBlocked(events, snapshot, now)) return
-    const malformed = snapshot.files
+    if (retryBlocked(events, currentSnapshot, now)) return
+    const malformed = currentSnapshot.files
       .filter(file => !file.managedRegionValid)
       .map<MemoryConsolidationTargetOutcome>(file => ({
         target: file.target,
@@ -959,7 +812,7 @@ async function consolidate(
         outcomes: malformed,
         retry: retryMetadata(
           events,
-          snapshot,
+          currentSnapshot,
           throughSeq,
           'malformed-managed-region',
           'file-change',
@@ -971,7 +824,7 @@ async function consolidate(
       return
     }
     const route = resolveRoute(agent, config)
-    const frame = reviewFrame(snapshot, turns, config)
+    const frame = reviewFrame(currentSnapshot, turns, config)
     const messages: Message[] = [createUserMessage({
       content: [{ type: 'text', text: JSON.stringify(frame) }],
       source: { kind: 'plugin', plugin: 'dsh-memory-consolidator' },
@@ -986,8 +839,8 @@ async function consolidate(
       messages,
       maxTokens: config.maxTokens,
       mode: config.mode,
-      workspace: snapshot.workspace,
-      files: snapshot.files.map(({ target, path, contentHash, existed, managedRegionValid }) => ({
+      workspace: currentSnapshot.workspace,
+      files: currentSnapshot.files.map(({ target, path, contentHash, existed, managedRegionValid }) => ({
         target, path, contentHash, existed, managedRegionValid,
       })),
     })
@@ -995,11 +848,11 @@ async function consolidate(
     const candidates = parseConsolidationOutput(rawText, config)
     signal.throwIfAborted()
     const explicitForget = turns.some(turn => turn.explicitForget)
-    const outcomes = await Promise.all(snapshot.files.map(file =>
+    const outcomes = await Promise.all(currentSnapshot.files.map(file =>
       commitFile(
         ctx,
         agent,
-        snapshot,
+        currentSnapshot,
         file,
         candidates,
         config,
@@ -1008,7 +861,7 @@ async function consolidate(
         explicitForget,
         signal,
       )))
-    if (snapshot.workspace.kind !== 'workspace') outcomes.push(...missingWorkspaceOutcomes(candidates))
+    if (currentSnapshot.workspace.kind !== 'workspace') outcomes.push(...missingWorkspaceOutcomes(candidates))
     signal.throwIfAborted()
     if (!canLog(ctx, agent, lifetime)) return
     const status = overallStatus(outcomes)
@@ -1018,7 +871,7 @@ async function consolidate(
       ? undefined
       : retryMetadata(
           events,
-          snapshot,
+          currentSnapshot,
           throughSeq,
           JSON.stringify(retryable.map(({ target, status: targetStatus, error }) => ({
             target,

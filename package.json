@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native layered memory for DeepSeek Harness with persona files, workspace scope, semantic recall, and background consolidation",
   "type": "module",
   "main": "lib/index.js",
@@ -14,6 +14,9 @@
     "scripts/check-bounded-file.mjs",
     "scripts/check-bundle.mjs",
     "scripts/check-consolidation-policy.mjs",
+    "scripts/check-eligible-turns.mjs",
+    "scripts/check-home-policy.mjs",
+    "scripts/check-managed-region.mjs",
     "scripts/check-ranking-policy.mjs",
     "scripts/check-ranking-output.mjs",
     "tsdown.config.ts",
@@ -25,8 +28,8 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "typecheck:policies": "tsc --noEmit --allowImportingTsExtensions --module esnext --moduleResolution bundler --target es2024 --types node src/bounded-file.ts src/consolidation-policy.ts src/ranking-output.ts src/ranking-policy.ts",
-    "check": "pnpm run typecheck:policies && pnpm run build && node scripts/check-bundle.mjs && node scripts/check-bounded-file.mjs && node scripts/check-ranking-output.mjs && node scripts/check-ranking-policy.mjs && node scripts/check-consolidation-policy.mjs"
+    "typecheck:policies": "tsc --noEmit --allowImportingTsExtensions --module esnext --moduleResolution bundler --target es2024 --types node src/bounded-file.ts src/consolidation-policy.ts src/eligible-turns.ts src/managed-region.ts src/ranking-output.ts src/ranking-policy.ts",
+    "check": "pnpm run typecheck:policies && pnpm run build && node scripts/check-bundle.mjs && node scripts/check-bounded-file.mjs && node scripts/check-ranking-output.mjs && node scripts/check-ranking-policy.mjs && node scripts/check-consolidation-policy.mjs && node scripts/check-managed-region.mjs && node scripts/check-eligible-turns.mjs && node scripts/check-home-policy.mjs"
   },
   "license": "MIT",
   "repository": {

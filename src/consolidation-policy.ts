@@ -25,6 +25,14 @@ export interface ManagedEntryDiff {
   removed: string[]
 }
 
+/** Complete-list rewrite decision, including the only list safe to write automatically. */
+export interface ManagedRewritePlan {
+  blocked: boolean
+  ratio: number
+  diff: ManagedEntryDiff
+  entries: string[]
+}
+
 /** Default maximum fraction of existing managed entries one automatic review may remove. */
 export const DEFAULT_MAX_DELETION_RATIO = 0.5
 /** Initial retry delay for transient consolidation failures. */
@@ -85,6 +93,25 @@ export function deletionGuard(
       && (clearsManagedRegion || ratio > maxDeletionRatio),
     ratio,
     diff,
+  }
+}
+
+/**
+ * Plan a complete-list rewrite. When destructive deletion is guarded, retain
+ * every existing entry verbatim and append only genuinely new entries from the
+ * reviewer result. This prevents a guarded deletion from discarding unrelated
+ * additions from the same source batch.
+ */
+export function planManagedRewrite(
+  before: readonly string[],
+  after: readonly string[],
+  maxDeletionRatio: number,
+  explicitForget: boolean,
+): ManagedRewritePlan {
+  const guard = deletionGuard(before, after, maxDeletionRatio, explicitForget)
+  return {
+    ...guard,
+    entries: guard.blocked ? [...before, ...guard.diff.added] : [...after],
   }
 }
 
