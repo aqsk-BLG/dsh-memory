@@ -9,12 +9,12 @@ An installable DSH profile bundle for WorkBuddy-style layered memory: global per
 The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.0.1
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.0.2
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.0.2` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
 
 `dsh plugin` updates only the existing profile's dependency metadata, lockfile, installed modules, and `dsh.profile.bundles` list. It does not modify the DSH source tree, create another agent or workspace, or reset existing sessions, models, settings, storage, or workspace registrations. The bundle also leaves `dshHome` unset, so the plugin uses the exact same single data root as the DSH instance: inherited `$DSH_HOME`, or DSH's own `~/.dsh` default only when that variable is unset. It never opens both roots.
 
@@ -32,7 +32,7 @@ Mounting the bundle composes five bundled capabilities and the guide:
 
 - **Persona files** — seeds and injects frozen `$DSH_HOME/IDENTITY.md` and `$DSH_HOME/SOUL.md` snapshots, logged as `persona/bootstrap`.
 - **Memory bootstrap** — injects frozen global `USER.md` and `MEMORY.md`, live project `MEMORY.md`, and a lightweight every-turn reminder that skips greetings, simple lookups, and short Q&A.
-- **Background consolidator** — reviews completed substantive turns, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. A guarded destructive rewrite retains old entries while applying bounded safe additions; retryable mixed results retain their watermark, malformed regions wait for repair, and transient failures back off.
+- **Background consolidator** — reviews each eligible completed task on the next idle transition, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. Greetings and short Q&A are skipped; a larger batching cadence remains an opt-in cost control. A guarded destructive rewrite retains old entries while applying bounded safe additions; retryable mixed results retain their watermark, malformed regions wait for repair, and transient failures back off.
 - **Hybrid session search** — semantically ranks bounded past-session surfaces when a model route is available, accepts legitimate empty shards in large tournaments, and provides an explicitly labeled full-text fallback.
 - **Compaction flush** — queues a post-compaction reminder to persist important context at the permitted memory layer.
 - A bundled `memory` runtime skill — explains file roles, what to record and skip, append-only daily logs, semantic recall, and the 30-day distillation rule. A project or preset may override it with a same-named skill.
@@ -71,14 +71,15 @@ A session with no matching membership — including the Web UI's Ungrouped group
 | `flushEnabled` | `true` | Queue the reminder after successful compaction |
 | `consolidationEnabled` | `true` | Run skip-aware reviews after eligible completed turns |
 | `consolidationMode` | `automatic` | Write controlled regions or log `proposal` candidates only |
-| `consolidationEveryEligibleTurns` | `10` | Ordinary eligible-turn review cadence |
+| `consolidationEveryEligibleTurns` | `1` | Eligible completed tasks per ordinary review batch; raise above one only to opt into batching |
 | `consolidationMinUserChars` | `12` | Minimum human code points for a non-tool turn |
 | `consolidationMinAssistantChars` | `24` | Minimum assistant code points for a non-tool turn |
 | `consolidationMaxTurnsPerReview` | `20` | Maximum eligible turns in one review |
 | `consolidationTranscriptBudgetChars` | `12000` | Bounded review transcript text |
-| `consolidationDailyBudgetChars` | `1200` | Complete daily section budget per review |
-| `consolidationMaxTokens` | `2048` | Review output-token cap |
-| `consolidationTimeoutMs` | `60000` | End-to-end review deadline in milliseconds |
+| `consolidationDailyBudgetChars` | `1200` | Daily append budget per review |
+| `consolidationMaxTokens` | unset | Advanced route override only; normally omit it so the selected model adapter supplies its native output limit |
+| `consolidationReasoningEffort` | unset | Normally inherit the live session's effort on the same route, or the dedicated route's adapter default |
+| `consolidationTimeoutMs` | `180000` | End-to-end background-review deadline in milliseconds |
 | `consolidationMaxDeletionRatio` | `0.5` | Larger automatic managed-list deletions become proposals; a full clear is always protected unless explicitly requested |
 | `consolidationRetryBaseDelayMs` | `60000` | Initial transient-failure retry delay |
 | `consolidationRetryMaxDelayMs` | `3600000` | Maximum transient-failure retry delay |
@@ -110,7 +111,7 @@ Every session receives frozen persona and global-memory sections. Each request a
 
 #### Token effect
 
-Persona and global snapshots spend bounded prompt tokens on every request. The live scope adds a bounded project snapshot and short reminder only where authorized. Daily logs and the full skill cost tokens only when read. Semantic recall makes separate bounded model calls only when the tool is invoked. Background consolidation makes one bounded auxiliary call after ten eligible turns by default, or immediately after an explicit remember request.
+Persona and global snapshots spend bounded prompt tokens on every request. The live scope adds a bounded project snapshot and short reminder only where authorized. Daily logs and the full skill cost tokens only when read. Semantic recall makes separate bounded model calls only when the tool is invoked. Background consolidation makes one auxiliary call after each eligible completed task becomes idle by default; greetings and short Q&A are filtered first. The reviewer keeps the selected route's reasoning capability and returns only incremental `add`/exact-`remove` patches plus new daily notes. The plugin imposes no fixed output-token cap by default: the model adapter's native route limit remains the transport boundary, while the final `USER.md`, global/project `MEMORY.md`, and daily append character budgets are the write authority. A visible-JSON circuit breaker is calculated from those same file budgets and does not count hidden reasoning. Each successful batch schedules the next pending batch while the agent remains idle, so old tasks are drained without being packed into one oversized request. Operators who prefer fewer calls can raise `consolidationEveryEligibleTurns`, while explicit remember and forget requests still bypass batching.
 
 #### KV Cache effect
 
@@ -129,7 +130,7 @@ This package is a standalone distribution of `packages/memory/*` and `packages/i
 - **No daily-log injection** — dated project history remains on-demand even though curated project memory is live.
 - **No historical daily-log distillation yet** — the background consolidator reviews newly completed turns; 30-day daily-log distillation remains a manual maintenance rule.
 - **Proposal mode is inspection-only** — there is no later approve/apply command or UI.
-- **Deletion guard proposals require manual follow-up** — in automatic mode, bounded safe additions are written while guarded old entries are retained; the rejected complete list remains in session events. If retaining old entries plus every addition would exceed the target budget, nothing is written and the proposal remains inspection-only.
+- **Deletion guard proposals require manual follow-up** — in automatic mode, bounded safe additions are written while guarded old entries are retained; the materialized candidate and target outcome remain in session events. If retaining old entries plus every addition would exceed the target budget, nothing is written and the proposal remains inspection-only.
 - **Provider-visible semantic candidates** — semantic recall sends bounded past-session excerpts to the selected model provider; disable it for local full-text-only recall.
 - **No cross-device corpus or cloud sync** — session discovery and full-text fallback use the composed DSH session-query store; cloud synchronization remains an optional future layer.
 

@@ -73,7 +73,7 @@ export interface Config {
   consolidationEnabled: boolean
   /** Apply controlled writes or retain review candidates as log-only proposals. */
   consolidationMode: MemoryConsolidator.Config['mode']
-  /** Eligible turns accumulated before an ordinary background review. */
+  /** Eligible completed tasks per review; values above one opt into batching. */
   consolidationEveryEligibleTurns: number
   /** Minimum direct-human code points for a non-tool turn to count. */
   consolidationMinUserChars: number
@@ -85,8 +85,10 @@ export interface Config {
   consolidationTranscriptBudgetChars: number
   /** Maximum code points appended to a dated project log by one review. */
   consolidationDailyBudgetChars: number
-  /** Output-token cap for one background review. */
-  consolidationMaxTokens: number
+  /** Optional model-route output-cap override; normally omit to use the adapter default. */
+  consolidationMaxTokens?: number
+  /** Optional reviewer effort override; normally omit to inherit the live route/default. */
+  consolidationReasoningEffort?: string
   /** End-to-end deadline for one background review in milliseconds. */
   consolidationTimeoutMs: number
   /** Maximum fraction of existing managed entries one automatic review may remove. */
@@ -125,14 +127,17 @@ export const Config: z<Config> = z.object({
   flushEnabled: z.boolean().default(true),
   consolidationEnabled: z.boolean().default(true),
   consolidationMode: z.union(['automatic', 'proposal'] as const).default('automatic'),
-  consolidationEveryEligibleTurns: z.number().step(1).min(1).default(10),
+  consolidationEveryEligibleTurns: z.number().step(1).min(1)
+    .default(MemoryConsolidator.DEFAULT_EVERY_ELIGIBLE_TURNS),
   consolidationMinUserChars: z.number().step(1).min(0).default(12),
   consolidationMinAssistantChars: z.number().step(1).min(0).default(24),
   consolidationMaxTurnsPerReview: z.number().step(1).min(1).default(20),
   consolidationTranscriptBudgetChars: z.number().step(1).min(1).default(12000),
   consolidationDailyBudgetChars: z.number().step(1).min(1).default(1200),
-  consolidationMaxTokens: z.number().step(1).min(1).default(2048),
-  consolidationTimeoutMs: z.number().step(1).min(1).default(60000),
+  consolidationMaxTokens: z.number().step(1).min(1),
+  consolidationReasoningEffort: z.string(),
+  consolidationTimeoutMs: z.number().step(1).min(1)
+    .default(MemoryConsolidator.DEFAULT_TIMEOUT_MS),
   consolidationMaxDeletionRatio: z.number().min(0).max(1).default(0.5),
   consolidationRetryBaseDelayMs: z.number().step(1).min(1).default(60000),
   consolidationRetryMaxDelayMs: z.number().step(1).min(1).default(3600000),
@@ -195,7 +200,12 @@ export function apply(ctx: Context, config: Config): void {
     globalBudgetChars: config.memoryBudgetChars,
     projectBudgetChars: config.projectMemoryBudgetChars,
     dailyBudgetChars: config.consolidationDailyBudgetChars,
-    maxTokens: config.consolidationMaxTokens,
+    ...(config.consolidationMaxTokens === undefined
+      ? {}
+      : { maxTokens: config.consolidationMaxTokens }),
+    ...(config.consolidationReasoningEffort === undefined
+      ? {}
+      : { reasoningEffort: config.consolidationReasoningEffort }),
     timeoutMs: config.consolidationTimeoutMs,
     maxDeletionRatio: config.consolidationMaxDeletionRatio,
     retryBaseDelayMs: config.consolidationRetryBaseDelayMs,

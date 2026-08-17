@@ -33,12 +33,58 @@ export interface ManagedRewritePlan {
   entries: string[]
 }
 
+/** Incremental reviewer intent for one managed memory region. */
+export interface ManagedEntryPatch {
+  add: readonly string[]
+  remove: readonly string[]
+}
+
+/** Incremental rewrite decision, including reviewer references that were not safe to apply. */
+export interface ManagedPatchPlan extends ManagedRewritePlan {
+  unknownRemovals: string[]
+  conflictingEntries: string[]
+}
+
 /** Default maximum fraction of existing managed entries one automatic review may remove. */
 export const DEFAULT_MAX_DELETION_RATIO = 0.5
 /** Initial retry delay for transient consolidation failures. */
 export const DEFAULT_RETRY_BASE_DELAY_MS = 60_000
 /** Maximum retry delay for repeated transient consolidation failures. */
 export const DEFAULT_RETRY_MAX_DELAY_MS = 3_600_000
+
+/**
+ * Decide whether an idle transition should start a review. The default cadence
+ * is one, so every eligible completed task is assessed after it becomes idle;
+ * deployments may raise the cadence to batch ordinary work. Explicit remember
+ * and forget requests always bypass batching.
+ */
+export function shouldStartConsolidationReview(
+  eligibleTurns: number,
+  cadence: number,
+  explicitRequest: boolean,
+): boolean {
+  return eligibleTurns > 0 && (explicitRequest || eligibleTurns >= cadence)
+}
+
+/**
+ * Choose the oldest eligible turns for one review. Ordinary work is processed
+ * in cadence-sized batches (one completed task by default); an explicit
+ * remember or forget request may consume the currently available backlog up to
+ * the hard per-review cap.
+ */
+export function consolidationReviewBatchSize(
+  eligibleTurns: number,
+  cadence: number,
+  maxTurnsPerReview: number,
+  explicitRequest: boolean,
+): number {
+  if (!shouldStartConsolidationReview(eligibleTurns, cadence, explicitRequest)) return 0
+  return Math.min(
+    eligibleTurns,
+    maxTurnsPerReview,
+    explicitRequest ? eligibleTurns : cadence,
+  )
+}
 
 /**
  * Successful results advance immediately. A mixed result advances only when
@@ -112,6 +158,50 @@ export function planManagedRewrite(
   return {
     ...guard,
     entries: guard.blocked ? [...before, ...guard.diff.added] : [...after],
+  }
+}
+
+/**
+ * Apply an incremental patch against the exact snapshotted list. Unknown
+ * removals and add/remove overlap are never destructive: existing entries are
+ * retained and only genuinely new additions remain eligible for an automatic
+ * write. The ordinary deletion-ratio guard still protects known removals.
+ */
+export function planManagedPatch(
+  before: readonly string[],
+  patch: ManagedEntryPatch,
+  maxDeletionRatio: number,
+  explicitForget: boolean,
+): ManagedPatchPlan {
+  const previous = uniqueEntries(before)
+  const additions = uniqueEntries(patch.add)
+  const removals = uniqueEntries(patch.remove)
+  const conflictingEntries = [...additions]
+    .filter(([key]) => removals.has(key))
+    .map(([, value]) => value)
+  const unknownRemovals = [...removals]
+    .filter(([key]) => !previous.has(key))
+    .map(([, value]) => value)
+  const desired = [...previous]
+    .filter(([key]) => !removals.has(key))
+    .map(([, value]) => value)
+  const desiredKeys = new Set(desired.map(entry => entry.toLocaleLowerCase()))
+  for (const [key, value] of additions) {
+    if (removals.has(key) || desiredKeys.has(key)) continue
+    desiredKeys.add(key)
+    desired.push(value)
+  }
+
+  const rewrite = planManagedRewrite(before, desired, maxDeletionRatio, explicitForget)
+  const blocked = rewrite.blocked
+    || unknownRemovals.length > 0
+    || conflictingEntries.length > 0
+  return {
+    ...rewrite,
+    blocked,
+    entries: blocked ? [...before, ...rewrite.diff.added] : rewrite.entries,
+    unknownRemovals,
+    conflictingEntries,
   }
 }
 

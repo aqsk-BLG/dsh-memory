@@ -68,15 +68,21 @@ do not duplicate them. Daily files remain on-demand and are never automatically 
 
 ## Background consolidation
 
-By default, ten eligible completed human turns trigger one tools-free background review. Greetings,
-short Q&A, and unsuccessful turns do not count; tool-using substantive turns count, and an explicit
-remember request triggers immediately. The reviewer returns bounded complete managed lists for
-\`USER.md\`, global \`MEMORY.md\`, and the live workspace \`MEMORY.md\`, plus new daily entries. The
-plugin validates the output, rejects secret-like values, rechecks workspace binding, and refuses to
-overwrite a file changed after its snapshot. Retryable mixed writes keep their source watermark and
-daily sections are idempotent by session/sequence. Large managed-list deletions become proposals
-unless the user explicitly asked to forget the affected memory; malformed regions wait for repair
-and transient failures back off. \`IDENTITY.md\` and \`SOUL.md\` are never targets.
+By default, every eligible completed human task triggers one tools-free background review on the
+next idle transition. A single substantial result never waits for arbitrary later chat turns.
+Greetings, short Q&A, and unsuccessful turns do not count; tool-using substantive turns count, and
+an explicit remember or forget request triggers immediately even when an operator has configured a
+larger batching cadence. The reviewer inherits the live route's reasoning effort, or the selected
+adapter's default on a dedicated route, and the plugin does not impose a fixed output-token cap by
+default. It returns incremental additions and exact removals for \`USER.md\`, global \`MEMORY.md\`,
+and the live workspace \`MEMORY.md\`, plus new daily entries. The final file character budgets remain
+the write authority; a visible-JSON safety bound is derived from those budgets and never counts
+hidden reasoning. The plugin validates the patch, rejects secret-like values and unknown removals,
+rechecks workspace binding, and refuses to overwrite a file changed after its snapshot. Retryable
+mixed writes keep their source watermark and daily sections are idempotent by session/sequence.
+Large managed-list deletions become proposals unless the user explicitly asked to forget the
+affected memory; malformed regions wait for repair and transient failures back off. \`IDENTITY.md\`
+and \`SOUL.md\` are never targets.
 
 ## Layer 3 — Session recall
 

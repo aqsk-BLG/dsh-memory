@@ -2,12 +2,25 @@ import assert from 'node:assert/strict'
 import {
   advancesConsolidationWatermark,
   appendDailyOnce,
+  consolidationReviewBatchSize,
   consolidationRetryDelay,
   dailyReviewMarker,
   deletionGuard,
+  planManagedPatch,
   planManagedRewrite,
   shouldBlockConsolidationRetry,
+  shouldStartConsolidationReview,
 } from '../src/consolidation-policy.ts'
+
+assert.equal(shouldStartConsolidationReview(0, 1, false), false)
+assert.equal(shouldStartConsolidationReview(1, 1, false), true)
+assert.equal(shouldStartConsolidationReview(1, 10, false), false)
+assert.equal(shouldStartConsolidationReview(1, 10, true), true)
+assert.equal(consolidationReviewBatchSize(0, 1, 20, false), 0)
+assert.equal(consolidationReviewBatchSize(5, 1, 20, false), 1)
+assert.equal(consolidationReviewBatchSize(12, 10, 20, false), 10)
+assert.equal(consolidationReviewBatchSize(3, 10, 20, true), 3)
+assert.equal(consolidationReviewBatchSize(12, 10, 5, false), 5)
 
 assert.equal(advancesConsolidationWatermark({
   status: 'partial',
@@ -40,6 +53,38 @@ assert.deepEqual(guardedRewrite.diff.added, ['new-entry'])
 assert.deepEqual(guardedRewrite.entries, ['keep', 'old-one', 'old-two', 'new-entry'])
 assert.deepEqual(planManagedRewrite(['one', 'two'], ['one'], 0.5, false).entries, ['one'])
 assert.deepEqual(planManagedRewrite(['one'], [], 0.5, true).entries, [])
+
+const incremental = planManagedPatch(
+  ['one', 'two'],
+  { add: ['three'], remove: ['ONE'] },
+  0.5,
+  false,
+)
+assert.equal(incremental.blocked, false)
+assert.deepEqual(incremental.entries, ['two', 'three'])
+const unknownRemoval = planManagedPatch(
+  ['keep'],
+  { add: ['safe addition'], remove: ['hallucinated old entry'] },
+  0.5,
+  true,
+)
+assert.equal(unknownRemoval.blocked, true)
+assert.deepEqual(unknownRemoval.unknownRemovals, ['hallucinated old entry'])
+assert.deepEqual(unknownRemoval.entries, ['keep', 'safe addition'])
+const guardedPatch = planManagedPatch(
+  ['keep', 'old-one', 'old-two'],
+  { add: ['new-entry'], remove: ['old-one', 'old-two'] },
+  0.5,
+  false,
+)
+assert.equal(guardedPatch.blocked, true)
+assert.deepEqual(guardedPatch.entries, ['keep', 'old-one', 'old-two', 'new-entry'])
+assert.deepEqual(planManagedPatch(
+  ['one'],
+  { add: [], remove: ['one'] },
+  0.5,
+  true,
+).entries, [])
 assert.equal(advancesConsolidationWatermark({
   status: 'proposed',
   outcomes: [{ status: 'proposed' }],
@@ -67,4 +112,4 @@ assert.equal(shouldBlockConsolidationRetry({
   retryAfter: 2_000,
 }, 'same', 2_000), false)
 
-console.log('consolidation watermark, idempotency, deletion guard, and retry policies pass')
+console.log('consolidation trigger, watermark, idempotency, incremental patch, deletion guard, and retry policies pass')

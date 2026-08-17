@@ -35,7 +35,7 @@ export interface MemoryConsolidationFileSnapshot {
   managedRegionValid: boolean
 }
 
-/** Validated complete managed entries plus new daily-log entries returned by the reviewer. */
+/** Validated materialized managed lists plus new daily-log entries derived from the reviewer patch. */
 export interface MemoryConsolidationCandidates {
   user: string[]
   global: string[]
