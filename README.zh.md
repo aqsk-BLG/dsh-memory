@@ -1,27 +1,41 @@
-# dsh-memory
+# dsh-file-memory
 
 [English](README.md) | 中文
 
-可安装到 DSH profile 的 WorkBuddy 风格分层记忆 bundle：全局人格与记忆文件、显式绑定工作区的实时记忆、可跳过提醒与后台整理、混合会话回忆、压缩后 flush，以及随包分发的使用 skill（技能）。本仓库是 DeepSeek Harness 源码实现的独立 Git 发行版。
+可安装到 DSH profile 的 WorkBuddy 风格分层记忆 bundle：全局人格与记忆文件、显式绑定工作区的实时记忆、可跳过提醒与后台整理、混合会话回忆、压缩后 flush，以及随包分发的使用 skill（技能）。本仓库是 DeepSeek Harness 源码实现的独立 Git 发行版。自 v1.2.1 起，包名发布为 `dsh-file-memory`。
 
 ## 安装或移除
 
 预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.0
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.1
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-若希望跟随仓库最新提交，可去掉 `#v1.2.0`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+若希望跟随仓库最新提交，可去掉 `#v1.2.1`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+
+发布到 npm 后，注册表包名为 `dsh-file-memory`：
+
+```sh
+pnpm dsh plugin --profile web add dsh-file-memory
+```
+
+也可以从 Release 产物安装：先在 [v1.2.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.2.1) 的 assets 下载 `dsh-file-memory-1.2.1.tgz`，然后：
+
+```sh
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.2.1.tgz
+```
+
+> **命名说明。**自 v1.2.1 起本包以 **`dsh-file-memory`** 发布。npm 上的 `dsh-memory` 是另一个无关的包——请勿误装。
 
 `dsh plugin` 只更新现有 profile 的依赖元数据、锁文件、已安装模块和 `dsh.profile.bundles` 列表。它不会修改 DSH 源码，不会另建智能体或工作区，也不会重置已有会话、模型、设置、存储或工作区注册。bundle 同样不会设置 `dshHome`，因此插件与当前 DSH 实例始终使用同一个数据根：优先继承 `$DSH_HOME`；仅当该变量未设置时，才与 DSH 一起使用其默认的 `~/.dsh`。它不会同时打开两个根目录。
 
 bundle 会插入 `memory` 行，并在 `$DSH_HOME/session-query.sqlite` 启用会话查询索引；后续 profile 与 home patch 仍可覆盖这两行。仓库已提交构建好的 `lib/index.js`，安装时无需运行依赖生命周期构建。卸载依赖和配置层后重启 DSH：
 
 ```sh
-pnpm dsh plugin --profile web remove dsh-memory
+pnpm dsh plugin --profile web remove dsh-file-memory
 ```
 
 公开仓库可从 GitHub 的 [`dsh-plugin` topic](https://github.com/topics/dsh-plugin)发现。
@@ -52,7 +66,7 @@ pnpm dsh plugin --profile web remove dsh-memory
 v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request`、`memory/consolidation-result`）。v1.1.0 已改为文件化状态，v1.2.0 沿用该模型。升级步骤：
 
 1. 停止 DSH。
-2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.2.0`）；若暂不升级插件，也可只执行下面的旧事件清理。
+2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.2.1`）；若暂不升级插件，也可只执行下面的旧事件清理。
 3. 旧事件被标记为可忽略或删除前，原版 harness 无法重新打开 v1.0.x 日志。停止 DSH 后执行：
 
    ```sh
@@ -80,7 +94,7 @@ v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/boot
 
 ## 持久化模型
 
-自 v1.1.0 起，dsh-memory **不再写入任何自定义会话事件**。官方 DeepSeek Harness 构建会拒绝解释包含目录外事件类型的会话日志——除非该事件携带 `ignorable` 信封标记（SessionFormatUnsupportedError），而 `Session.append` 无法设置该标记——因此持久化状态绝不能依赖自定义目录事件。本插件从不追加 `memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request` 或 `memory/consolidation-result`，纯官方 DSH 上的社区用户不会再遇到该拒绝。
+自 v1.1.0 起，本插件**不再写入任何自定义会话事件**。官方 DeepSeek Harness 构建会拒绝解释包含目录外事件类型的会话日志——除非该事件携带 `ignorable` 信封标记（SessionFormatUnsupportedError），而 `Session.append` 无法设置该标记——因此持久化状态绝不能依赖自定义目录事件。本插件从不追加 `memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request` 或 `memory/consolidation-result`，纯官方 DSH 上的社区用户不会再遇到该拒绝。
 
 文件化状态位于当前 DSH 数据根下：
 
@@ -149,7 +163,7 @@ Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 
 若使用原始 Cordis 组合而非 profile bundle：
 
 ```yaml
-- name: dsh-memory
+- name: dsh-file-memory
   config:
     reminderEnabled: true
     semanticEnabled: true

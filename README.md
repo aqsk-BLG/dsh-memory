@@ -1,27 +1,41 @@
-# dsh-memory
+# dsh-file-memory
 
 English | [中文](README.zh.md)
 
-An installable DSH profile bundle for WorkBuddy-style layered memory: global persona and memory files, live explicitly bound workspace memory, skip-aware reminders and background consolidation, hybrid session recall, post-compaction flush, and a bundled usage skill. This repository is the standalone Git distribution of the implementation developed in DeepSeek Harness.
+An installable DSH profile bundle for WorkBuddy-style layered memory: global persona and memory files, live explicitly bound workspace memory, skip-aware reminders and background consolidation, hybrid session recall, post-compaction flush, and a bundled usage skill. This repository is the standalone Git distribution of the implementation developed in DeepSeek Harness. Since v1.2.1 the package is published as `dsh-file-memory`.
 
 ## Install or remove
 
 The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.0
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.1
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.2.0` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.2.1` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+
+Once published to npm, the registry package name is `dsh-file-memory`:
+
+```sh
+pnpm dsh plugin --profile web add dsh-file-memory
+```
+
+Or install from a release tarball: download `dsh-file-memory-1.2.1.tgz` from the assets of the [v1.2.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.2.1), then:
+
+```sh
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.2.1.tgz
+```
+
+> **Naming note.** Since v1.2.1 this package is published as **`dsh-file-memory`**. The npm name `dsh-memory` is a different, unrelated package — do not install that one by mistake.
 
 `dsh plugin` updates only the existing profile's dependency metadata, lockfile, installed modules, and `dsh.profile.bundles` list. It does not modify the DSH source tree, create another agent or workspace, or reset existing sessions, models, settings, storage, or workspace registrations. The bundle also leaves `dshHome` unset, so the plugin uses the exact same single data root as the DSH instance: inherited `$DSH_HOME`, or DSH's own `~/.dsh` default only when that variable is unset. It never opens both roots.
 
 The bundle inserts the `memory` row and enables the session-query index at `$DSH_HOME/session-query.sqlite`; later profile and home patches may override either row. The repository commits its built `lib/index.js`, so installation does not need a dependency lifecycle build. Remove both the dependency and layer, then restart DSH, with:
 
 ```sh
-pnpm dsh plugin --profile web remove dsh-memory
+pnpm dsh plugin --profile web remove dsh-file-memory
 ```
 
 The public repository is discoverable through GitHub's [`dsh-plugin` topic](https://github.com/topics/dsh-plugin).
@@ -52,7 +66,7 @@ When `$DSH_HOME` does not yet contain `USER.md`, `MEMORY.md`, `IDENTITY.md`, or 
 v1.0.x wrote four custom session events (`memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, `memory/consolidation-result`). v1.1.0 replaced them with file-backed state; v1.2.0 keeps that model. Upgrade steps:
 
 1. Stop DSH.
-2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.2.0`), or keep the running version and just strip the legacy events below.
+2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.2.1`), or keep the running version and just strip the legacy events below.
 3. Stock harnesses refuse to reopen v1.0.x logs until the legacy events are marked ignorable or stripped. With DSH stopped, run:
 
    ```sh
@@ -80,7 +94,7 @@ The standalone build compiles all five capabilities into one `lib/index.js` and 
 
 ## Durability model
 
-Since v1.1.0 dsh-memory writes **no custom session events**. Official DeepSeek Harness builds refuse to interpret session logs containing event types outside their catalog unless the event carries the `ignorable` envelope marker (`SessionFormatUnsupportedError`), and `Session.append` cannot set that marker — so durable state must not depend on custom catalog events. Community users on a pure official DSH never hit the refusal because this plugin never appends `memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, or `memory/consolidation-result`.
+Since v1.1.0 the plugin writes **no custom session events**. Official DeepSeek Harness builds refuse to interpret session logs containing event types outside their catalog unless the event carries the `ignorable` envelope marker (`SessionFormatUnsupportedError`), and `Session.append` cannot set that marker — so durable state must not depend on custom catalog events. Community users on a pure official DSH never hit the refusal because this plugin never appends `memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, or `memory/consolidation-result`.
 
 File-backed state instead lives under the active DSH home:
 
@@ -149,7 +163,7 @@ A session with no matching membership — including the Web UI's Ungrouped group
 For a raw Cordis composition rather than a profile bundle:
 
 ```yaml
-- name: dsh-memory
+- name: dsh-file-memory
   config:
     reminderEnabled: true
     semanticEnabled: true

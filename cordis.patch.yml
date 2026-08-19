@@ -10,4 +10,4 @@
 
 - insert:
     - id: memory
-      name: dsh-memory
+      name: dsh-file-memory

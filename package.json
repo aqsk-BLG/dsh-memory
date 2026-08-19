@@ -1,6 +1,6 @@
 {
-  "name": "dsh-memory",
-  "version": "1.2.0",
+  "name": "dsh-file-memory",
+  "version": "1.2.1",
   "description": "Native layered memory for DeepSeek Harness with persona files, workspace scope, semantic recall, and background consolidation",
   "type": "module",
   "main": "lib/index.js",
