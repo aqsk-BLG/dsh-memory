@@ -17,6 +17,7 @@ import * as MemoryConsolidator from './consolidator.ts'
 import * as MemoryFlush from './flush.ts'
 import * as ToolSessionSearch from './search.ts'
 import { enforceHostVersionGate, type VersionGateMode } from './host-version.ts'
+import { applyMemoryPanel } from './panel.ts'
 import type {} from '@deepseek-ai/dsh-skill'
 import { MEMORY_SKILL_CONTENT, MEMORY_SKILL_DESCRIPTION, MEMORY_SKILL_NAME } from './skill.ts'
 
@@ -168,6 +169,7 @@ export const DEFAULT_MAX_HITS = 20
  */
 export function apply(ctx: Context, config: Config): void {
   enforceHostVersionGate(ctx.logger, config.versionGate)
+  applyMemoryPanel(ctx, Config, config)
   ctx.plugin(PersonaFiles, {
     ...(config.dshHome === undefined ? {} : { dshHome: config.dshHome }),
     identityBudgetChars: config.identityBudgetChars,

@@ -198,7 +198,8 @@ export function readOwnVersion(): string {
           name?: unknown
           version?: unknown
         }
-        if (manifest.name === 'dsh-memory' && typeof manifest.version === 'string') {
+        if ((manifest.name === 'dsh-file-memory' || manifest.name === 'dsh-memory')
+          && typeof manifest.version === 'string') {
           return manifest.version
         }
       }

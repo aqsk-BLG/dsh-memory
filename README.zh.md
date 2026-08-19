@@ -11,12 +11,12 @@
 预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.1
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.0
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-若希望跟随仓库最新提交，可去掉 `#v1.2.1`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+若希望跟随仓库最新提交，可去掉 `#v1.3.0`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
 
 发布到 npm 后，注册表包名为 `dsh-file-memory`：
 
@@ -24,17 +24,17 @@ pnpm dsh web
 pnpm dsh plugin --profile web add dsh-file-memory
 ```
 
-也可以从 Release 产物安装：先在 [v1.2.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.2.1) 的 assets 下载 `dsh-file-memory-1.2.1.tgz`，然后：
+也可以从 Release 产物安装：先在 [v1.3.0 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.0) 的 assets 下载 `dsh-file-memory-1.3.0.tgz`，然后：
 
 ```sh
-pnpm dsh plugin --profile web add ./dsh-file-memory-1.2.1.tgz
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.0.tgz
 ```
 
 > **命名说明。**自 v1.2.1 起本包以 **`dsh-file-memory`** 发布。npm 上的 `dsh-memory` 是另一个无关的包——请勿误装。
 
 `dsh plugin` 只更新现有 profile 的依赖元数据、锁文件、已安装模块和 `dsh.profile.bundles` 列表。它不会修改 DSH 源码，不会另建智能体或工作区，也不会重置已有会话、模型、设置、存储或工作区注册。bundle 同样不会设置 `dshHome`，因此插件与当前 DSH 实例始终使用同一个数据根：优先继承 `$DSH_HOME`；仅当该变量未设置时，才与 DSH 一起使用其默认的 `~/.dsh`。它不会同时打开两个根目录。
 
-bundle 会插入 `memory` 行，并在 `$DSH_HOME/session-query.sqlite` 启用会话查询索引；后续 profile 与 home patch 仍可覆盖这两行。仓库已提交构建好的 `lib/index.js`，安装时无需运行依赖生命周期构建。卸载依赖和配置层后重启 DSH：
+bundle 会插入 `memory` 行，并在 `$DSH_HOME/session-query.sqlite` 启用会话查询索引；后续 profile 与 home patch 仍可覆盖这两行。仓库已提交构建好的 `lib/index.js` 与 `lib/client.js`，安装时无需运行依赖生命周期构建。卸载依赖和配置层后重启 DSH：
 
 ```sh
 pnpm dsh plugin --profile web remove dsh-file-memory
@@ -68,7 +68,7 @@ pnpm dsh plugin --profile web remove dsh-file-memory
 v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request`、`memory/consolidation-result`）。v1.1.0 已改为文件化状态，v1.2.0 沿用该模型。升级步骤：
 
 1. 停止 DSH。
-2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.2.1`）；若暂不升级插件，也可只执行下面的旧事件清理。
+2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.3.0`）；若暂不升级插件，也可只执行下面的旧事件清理。
 3. 旧事件被标记为可忽略或删除前，原版 harness 无法重新打开 v1.0.x 日志。停止 DSH 后执行：
 
    ```sh
@@ -90,6 +90,7 @@ v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/boot
 - **后台记忆巩固器**：每个有效任务完成并进入空闲态后立即审核，通过冲突检查写入有界受管区块，并且只为仍然绑定的工作区幂等追加每日日志。问候和短问答会跳过；更大的批处理节奏仍可作为可选成本控制。破坏性重写被守卫拦截时，会保留旧条目并写入预算内的安全新增项；可重试的混合结果不会推进水位线，畸形受管区等待修复，瞬时失败采用退避。水位线与重试控制基于文件持久化（见下方“持久化模型”）。
 - **混合会话搜索**：有模型路由时对有界既往会话 surface 进行语义排序，大型锦标赛允许合法空分片，并提供明确标注的全文回退。
 - **压缩后 flush**：压缩后排入提醒，把重要上下文写入当前允许的记忆层。
+- **设置卡**：挂在官方 `memory` 命名空间的插件配置卡（状态、四个核心文件、常用开关）。文件保存立刻落盘；开关写入官方设置文档，下次启动 DSH 生效。
 - 随包的 `memory` runtime skill：说明文件职责、该记录和跳过什么、仅追加每日日志、语义回忆与 30 天蒸馏规则。项目或 preset 可用同名 skill 覆盖它。
 
 独立构建会把五项能力编译进同一个 `lib/index.js`，运行时只把 DSH 主程序包作为 peer。人格文件在内部仍是独立身份关注点，只是 facade 将它与记忆一并安装。
@@ -201,8 +202,19 @@ Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 
 
 本包是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 中 `packages/memory/*` 与 `packages/identity/persona-files` 的独立发行版，采用 MIT 许可证。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
+## 设置卡
+
+打开 **设置 → 插件 → 插件配置**。卡片中英双语，做三件事：
+
+- **状态**：宿主版本、插件版本、`$DSH_HOME`、召回索引、最近巩固状态。
+- **核心文件**：查看并编辑 `IDENTITY.md` / `SOUL.md` / `USER.md` / `MEMORY.md`。USER/MEMORY 保存会拒绝坏掉的 consolidator 受管区，也拒绝过期哈希。
+- **常用开关**：提醒、语义召回、全文回退、flush、巩固、模式、节奏、三个记忆预算。立刻写入官方设置文档，下次启动 DSH 生效。更细的字段仍改 `cordis.patch.yml`。
+
+这张卡与 Agent 预设不冲突。预设改 `agent.cordis.yml`；这张卡改人格/记忆文件和 `memory` 设置命名空间。
+
 ## 已知限制与暂缓工作
 
+- **开关需要重启才生效**：卡片通过官方设置文档落盘，但 v1 不会热重挂五个能力部件。
 - **每会话冻结 home 文件**：对 `IDENTITY.md`、`SOUL.md`、`USER.md` 或全局 `MEMORY.md` 的编辑，只会在新会话进入已有模型上下文（v1.0.x 额外写每会话快照事件；v1.1.0 直接读文件，恢复的会话会重新快照当前文件）。
 - **不注入每日日志**：即使项目长期记忆保持实时，带日期的项目历史仍按需读取。
 - **尚无历史每日日志蒸馏**：后台整理器审核新完成的轮次；30 天每日日志蒸馏仍是手动维护规则。

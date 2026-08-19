@@ -16,6 +16,8 @@ const required = [
   'semantic ranking tournament made no progress',
   'consolidation state file is malformed',
   'memory-consolidator: cannot persist consolidation state',
+  '/api/plugins/dsh-file-memory',
+  'installSettingsSection',
 ]
 
 for (const marker of required) {

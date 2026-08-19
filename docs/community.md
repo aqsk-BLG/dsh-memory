@@ -18,15 +18,15 @@ The npm name `dsh-memory` is a **different, unrelated** package. Installers and 
 pnpm dsh plugin --profile web add dsh-file-memory
 
 # GitHub release tag
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.1
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.0
 
 # GitHub Release tarball
-pnpm dsh plugin --profile web add ./dsh-file-memory-1.2.1.tgz
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.0.tgz
 ```
 
 Release asset:
 
-`https://github.com/aqsk-BLG/dsh-memory/releases/download/v1.2.1/dsh-file-memory-1.2.1.tgz`
+`https://github.com/aqsk-BLG/dsh-memory/releases/download/v1.3.0/dsh-file-memory-1.3.0.tgz`
 
 ## One-line description (accurate)
 

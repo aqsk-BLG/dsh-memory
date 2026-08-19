@@ -11,12 +11,12 @@ An installable DSH profile bundle for WorkBuddy-style layered memory: global per
 The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.1
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.0
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.2.1` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.3.0` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
 
 Once published to npm, the registry package name is `dsh-file-memory`:
 
@@ -24,17 +24,17 @@ Once published to npm, the registry package name is `dsh-file-memory`:
 pnpm dsh plugin --profile web add dsh-file-memory
 ```
 
-Or install from a release tarball: download `dsh-file-memory-1.2.1.tgz` from the assets of the [v1.2.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.2.1), then:
+Or install from a release tarball: download `dsh-file-memory-1.3.0.tgz` from the assets of the [v1.3.0 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.0), then:
 
 ```sh
-pnpm dsh plugin --profile web add ./dsh-file-memory-1.2.1.tgz
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.0.tgz
 ```
 
 > **Naming note.** Since v1.2.1 this package is published as **`dsh-file-memory`**. The npm name `dsh-memory` is a different, unrelated package — do not install that one by mistake.
 
 `dsh plugin` updates only the existing profile's dependency metadata, lockfile, installed modules, and `dsh.profile.bundles` list. It does not modify the DSH source tree, create another agent or workspace, or reset existing sessions, models, settings, storage, or workspace registrations. The bundle also leaves `dshHome` unset, so the plugin uses the exact same single data root as the DSH instance: inherited `$DSH_HOME`, or DSH's own `~/.dsh` default only when that variable is unset. It never opens both roots.
 
-The bundle inserts the `memory` row and enables the session-query index at `$DSH_HOME/session-query.sqlite`; later profile and home patches may override either row. The repository commits its built `lib/index.js`, so installation does not need a dependency lifecycle build. Remove both the dependency and layer, then restart DSH, with:
+The bundle inserts the `memory` row and enables the session-query index at `$DSH_HOME/session-query.sqlite`; later profile and home patches may override either row. The repository commits its built `lib/index.js` and `lib/client.js`, so installation does not need a dependency lifecycle build. Remove both the dependency and layer, then restart DSH, with:
 
 ```sh
 pnpm dsh plugin --profile web remove dsh-file-memory
@@ -68,7 +68,7 @@ When `$DSH_HOME` does not yet contain `USER.md`, `MEMORY.md`, `IDENTITY.md`, or 
 v1.0.x wrote four custom session events (`memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, `memory/consolidation-result`). v1.1.0 replaced them with file-backed state; v1.2.0 keeps that model. Upgrade steps:
 
 1. Stop DSH.
-2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.2.1`), or keep the running version and just strip the legacy events below.
+2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.3.0`), or keep the running version and just strip the legacy events below.
 3. Stock harnesses refuse to reopen v1.0.x logs until the legacy events are marked ignorable or stripped. With DSH stopped, run:
 
    ```sh
@@ -90,6 +90,7 @@ Mounting the bundle composes five bundled capabilities and the guide:
 - **Background consolidator** — reviews each eligible completed task on the next idle transition, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. Greetings and short Q&A are skipped; a larger batching cadence remains an opt-in cost control. A guarded destructive rewrite retains old entries while applying bounded safe additions; retryable mixed results retain their watermark, malformed regions wait for repair, and transient failures back off. The watermark and retry control are file-backed (see Durability model below).
 - **Hybrid session search** — semantically ranks bounded past-session surfaces when a model route is available, accepts legitimate empty shards in large tournaments, and provides an explicitly labeled full-text fallback.
 - **Compaction flush** — queues a post-compaction reminder to persist important context at the permitted memory layer.
+- **Settings card** — a Plugins-tab card (status, the four core files, common knobs) registered on the official `memory` settings namespace. File saves write the disk now; knob writes persist now and apply on the next DSH start.
 - A bundled `memory` runtime skill — explains file roles, what to record and skip, append-only daily logs, semantic recall, and the 30-day distillation rule. A project or preset may override it with a same-named skill.
 
 The standalone build compiles all five capabilities into one `lib/index.js` and leaves only DSH host packages as runtime peers. Persona files remain a separate identity concern internally even though the facade installs them together with memory.
@@ -201,8 +202,19 @@ Persona and global sections are frozen per session and prefix-stable. Workspace 
 
 This package is a standalone distribution of `packages/memory/*` and `packages/identity/persona-files` from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), licensed under MIT. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+## Settings card
+
+Open **Settings → Plugins → Plugin configuration**. The card is bilingual and does three things:
+
+- **Status** — host version, plugin version, `$DSH_HOME`, recall index, last consolidation state.
+- **Core files** — view and edit `IDENTITY.md`, `SOUL.md`, `USER.md`, `MEMORY.md`. USER/MEMORY saves refuse a broken consolidator managed region and refuse a stale content hash.
+- **Common knobs** — reminder, semantic recall, fallback, flush, consolidation, mode, cadence, and the three memory budgets. These write the official settings document immediately and take effect on the next DSH start. Advanced fields stay in `cordis.patch.yml` / the composition entry.
+
+The card does not overlap Agent Presets. Presets edit `agent.cordis.yml`; this card edits persona/memory files and the `memory` settings namespace.
+
 ## Known Limitations and Deferred Work
 
+- **Settings knobs apply on restart** — the card persists them through the official settings document, but v1 does not remount the five capability parts live.
 - **Frozen home files per session** — edits to `IDENTITY.md`, `SOUL.md`, `USER.md`, or global `MEMORY.md` enter existing model context only in a new session (v1.0.x additionally logged per-session snapshot events; v1.1.0 reads the files directly and a resumed session re-snapshots them).
 - **No daily-log injection** — dated project history remains on-demand even though curated project memory is live.
 - **No historical daily-log distillation yet** — the background consolidator reviews newly completed turns; 30-day daily-log distillation remains a manual maintenance rule.
