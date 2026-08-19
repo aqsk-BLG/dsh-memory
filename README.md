@@ -11,12 +11,12 @@ An installable DSH profile bundle for WorkBuddy-style layered memory: global per
 The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.0
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.1
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.3.0` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.3.1` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
 
 Once published to npm, the registry package name is `dsh-file-memory`:
 
@@ -24,10 +24,10 @@ Once published to npm, the registry package name is `dsh-file-memory`:
 pnpm dsh plugin --profile web add dsh-file-memory
 ```
 
-Or install from a release tarball: download `dsh-file-memory-1.3.0.tgz` from the assets of the [v1.3.0 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.0), then:
+Or install from a release tarball: download `dsh-file-memory-1.3.1.tgz` from the assets of the [v1.3.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.1), then:
 
 ```sh
-pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.0.tgz
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.1.tgz
 ```
 
 > **Naming note.** Since v1.2.1 this package is published as **`dsh-file-memory`**. The npm name `dsh-memory` is a different, unrelated package — do not install that one by mistake.
@@ -68,7 +68,7 @@ When `$DSH_HOME` does not yet contain `USER.md`, `MEMORY.md`, `IDENTITY.md`, or 
 v1.0.x wrote four custom session events (`memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, `memory/consolidation-result`). v1.1.0 replaced them with file-backed state; v1.2.0 keeps that model. Upgrade steps:
 
 1. Stop DSH.
-2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.3.0`), or keep the running version and just strip the legacy events below.
+2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.3.1`), or keep the running version and just strip the legacy events below.
 3. Stock harnesses refuse to reopen v1.0.x logs until the legacy events are marked ignorable or stripped. With DSH stopped, run:
 
    ```sh
@@ -204,11 +204,11 @@ This package is a standalone distribution of `packages/memory/*` and `packages/i
 
 ## Settings card
 
-Open **Settings → Plugins → Plugin configuration**. The card is bilingual and does three things:
+Open **Settings → Plugins → Plugin configuration**. The card uses the official plugin-card chrome (collapsed header + chevron, staged Save / Discard). Copy follows the UI locale.
 
 - **Status** — host version, plugin version, `$DSH_HOME`, recall index, last consolidation state.
 - **Core files** — view and edit `IDENTITY.md`, `SOUL.md`, `USER.md`, `MEMORY.md`. USER/MEMORY saves refuse a broken consolidator managed region and refuse a stale content hash.
-- **Common knobs** — reminder, semantic recall, fallback, flush, consolidation, mode, cadence, and the three memory budgets. These write the official settings document immediately and take effect on the next DSH start. Advanced fields stay in `cordis.patch.yml` / the composition entry.
+- **Common knobs** — reminder, semantic recall, fallback, flush, consolidation, mode, cadence, and the three memory budgets. These stage like the official cards and write the official settings document on Save. They take effect on the next DSH start. Advanced fields stay in `cordis.patch.yml` / the composition entry.
 
 The card does not overlap Agent Presets. Presets edit `agent.cordis.yml`; this card edits persona/memory files and the `memory` settings namespace.
 

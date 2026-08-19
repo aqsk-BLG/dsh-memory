@@ -11,12 +11,12 @@
 预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.0
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.1
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-若希望跟随仓库最新提交，可去掉 `#v1.3.0`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+若希望跟随仓库最新提交，可去掉 `#v1.3.1`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
 
 发布到 npm 后，注册表包名为 `dsh-file-memory`：
 
@@ -24,10 +24,10 @@ pnpm dsh web
 pnpm dsh plugin --profile web add dsh-file-memory
 ```
 
-也可以从 Release 产物安装：先在 [v1.3.0 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.0) 的 assets 下载 `dsh-file-memory-1.3.0.tgz`，然后：
+也可以从 Release 产物安装：先在 [v1.3.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.1) 的 assets 下载 `dsh-file-memory-1.3.1.tgz`，然后：
 
 ```sh
-pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.0.tgz
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.1.tgz
 ```
 
 > **命名说明。**自 v1.2.1 起本包以 **`dsh-file-memory`** 发布。npm 上的 `dsh-memory` 是另一个无关的包——请勿误装。
@@ -68,7 +68,7 @@ pnpm dsh plugin --profile web remove dsh-file-memory
 v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request`、`memory/consolidation-result`）。v1.1.0 已改为文件化状态，v1.2.0 沿用该模型。升级步骤：
 
 1. 停止 DSH。
-2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.3.0`）；若暂不升级插件，也可只执行下面的旧事件清理。
+2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.3.1`）；若暂不升级插件，也可只执行下面的旧事件清理。
 3. 旧事件被标记为可忽略或删除前，原版 harness 无法重新打开 v1.0.x 日志。停止 DSH 后执行：
 
    ```sh
@@ -204,11 +204,11 @@ Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 
 
 ## 设置卡
 
-打开 **设置 → 插件 → 插件配置**。卡片中英双语，做三件事：
+打开 **设置 → 插件 → 插件配置**。卡片用官方插件卡外壳（折叠标题 + 箭头，暂存后点保存/放弃）。文案跟界面语言走。
 
 - **状态**：宿主版本、插件版本、`$DSH_HOME`、召回索引、最近巩固状态。
 - **核心文件**：查看并编辑 `IDENTITY.md` / `SOUL.md` / `USER.md` / `MEMORY.md`。USER/MEMORY 保存会拒绝坏掉的 consolidator 受管区，也拒绝过期哈希。
-- **常用开关**：提醒、语义召回、全文回退、flush、巩固、模式、节奏、三个记忆预算。立刻写入官方设置文档，下次启动 DSH 生效。更细的字段仍改 `cordis.patch.yml`。
+- **常用开关**：提醒、语义召回、全文回退、flush、巩固、模式、节奏、三个记忆预算。和官方卡片一样先暂存，点保存才写入官方设置文档，下次启动 DSH 生效。更细的字段仍改 `cordis.patch.yml`。
 
 这张卡与 Agent 预设不冲突。预设改 `agent.cordis.yml`；这张卡改人格/记忆文件和 `memory` 设置命名空间。
 

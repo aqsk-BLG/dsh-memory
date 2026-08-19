@@ -15,6 +15,9 @@ const required = [
   'settingsScope',
   'IDENTITY',
   'MEMORY',
+  'locale.register',
+  'role: "switch"',
+  'aria-expanded',
 ]
 
 for (const marker of required) {
@@ -37,6 +40,7 @@ for (const marker of forbidden) {
 const inject = manifest.dsh?.client?.inject
 if (!Array.isArray(inject)
   || !inject.includes('@deepseek-ai/dsh-client-ui-settings')
+  || !inject.includes('@deepseek-ai/dsh-client-locale')
   || !inject.includes('@deepseek-ai/dsh-client-connection')
   || !inject.includes('@deepseek-ai/dsh-api-remotes')) {
   throw new Error('package.json dsh.client.inject must include settings + connection + remotes')

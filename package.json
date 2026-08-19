@@ -1,6 +1,6 @@
 {
   "name": "dsh-file-memory",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Native layered memory for DeepSeek Harness with persona files, workspace scope, semantic recall, and background consolidation",
   "type": "module",
   "main": "lib/index.js",
@@ -85,6 +85,7 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-api-remotes"
