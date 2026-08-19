@@ -1,9 +1,15 @@
 /**
  * Background layered-memory consolidation. Completed substantive human turns accumulate behind a
- * durable watermark; at the configured cadence a tools-free auxiliary model review proposes
- * bounded global/project entries, then this plugin alone performs conflict-checked atomic writes
- * inside owned file regions. Greetings and short Q&A do not count, while an explicit remember
- * remember or forget request forces an immediate review.
+ * durable file-backed watermark; at the configured cadence a tools-free auxiliary model review
+ * proposes bounded global/project entries, then this plugin alone performs conflict-checked
+ * atomic writes inside owned file regions. Greetings and short Q&A do not count, while an
+ * explicit remember or forget request forces an immediate review.
+ *
+ * Since 1.1.0 durable state never rides custom session events: the per-session watermark, last
+ * review result, and retry control live in `$DSH_HOME/memory/consolidation/<session>.json`
+ * (see src/consolidation-state.ts), because official DeepSeek Harness builds refuse session logs
+ * containing catalog-unknown event types. Legacy v1.0.x events are still read once for migration
+ * when the hosting harness can decode them.
  * @module dsh-memory/consolidator
  */
 
@@ -40,6 +46,18 @@ import {
   planManagedPatch,
   shouldBlockConsolidationRetry,
 } from './consolidation-policy.ts'
+import {
+  consolidationStatePath,
+  freshConsolidationState,
+  legacyConsolidationState,
+  mergeConsolidationState,
+  parseConsolidationState,
+  serializeConsolidationState,
+  type ConsolidationState,
+  type ConsolidationStatePatch,
+  type ConsolidationStateRequest,
+  type ConsolidationStateResult,
+} from './consolidation-state.ts'
 import {
   FORBIDDEN_INVISIBLE,
   maxReviewOutputCodePoints,
@@ -732,11 +750,6 @@ function safeError(error: unknown): string {
   return boundText(text.replace(FORBIDDEN_INVISIBLE, ''), 500)
 }
 
-function latestConsolidationResult(events: readonly SessionEvent[]) {
-  const event = events.findLast(candidate => candidate.type === 'memory/consolidation-result')
-  return event?.type === 'memory/consolidation-result' ? event : undefined
-}
-
 function reviewFileStateHash(snapshot: ReviewSnapshot): string {
   return contentHash(JSON.stringify(snapshot.files.map(file => ({
     target: file.target,
@@ -747,11 +760,11 @@ function reviewFileStateHash(snapshot: ReviewSnapshot): string {
 }
 
 function retryBlocked(
-  events: readonly SessionEvent[],
+  state: ConsolidationState,
   snapshot: ReviewSnapshot,
   now: Date,
 ): boolean {
-  const retry = latestConsolidationResult(events)?.data.retry
+  const retry = state.lastResult?.retry
   return shouldBlockConsolidationRetry(
     retry,
     reviewFileStateHash(snapshot),
@@ -760,7 +773,7 @@ function retryBlocked(
 }
 
 function retryMetadata(
-  events: readonly SessionEvent[],
+  state: ConsolidationState,
   snapshot: ReviewSnapshot | undefined,
   throughSeq: number,
   signature: string,
@@ -775,7 +788,7 @@ function retryMetadata(
     signature,
     disposition,
   }))
-  const previous = latestConsolidationResult(events)?.data.retry
+  const previous = state.lastResult?.retry
   const attempt = previous?.fingerprint === fingerprint ? previous.attempt + 1 : 1
   if (disposition === 'file-change') {
     return {
@@ -798,14 +811,75 @@ function retryMetadata(
   }
 }
 
-function lastWatermark(events: readonly SessionEvent[]): number {
-  const event = events.findLast(candidate => candidate.type === 'memory/consolidation-result'
-    && advancesConsolidationWatermark(candidate.data))
-  return event?.type === 'memory/consolidation-result' ? event.data.throughSeq : -1
-}
-
 function canLog(ctx: Context, agent: Agent, lifetime: AbortSignal): boolean {
   return !lifetime.aborted && ctx.agents.get(agent.id) === agent
+}
+
+/**
+ * Load the per-session consolidation state. A missing or malformed file is rebuilt from legacy
+ * v1.0.x consolidation events when the hosting harness decoded them, otherwise from a fresh
+ * watermark; either way the rebuilt record is written back so later loads are pure file reads.
+ */
+async function loadConsolidationState(
+  ctx: Context,
+  path: string,
+  sessionId: string,
+  events: readonly SessionEvent[],
+): Promise<ConsolidationState> {
+  try {
+    const raw = await readFile(path, 'utf8')
+    return parseConsolidationState(JSON.parse(raw), sessionId)
+  } catch (error) {
+    if (!isEnoent(error)) {
+      ctx.logger.warn(`memory-consolidator: cannot read consolidation state ${JSON.stringify(path)}: ${safeError(error)}; rebuilding from legacy events or a fresh watermark`)
+    }
+  }
+  const rebuilt = legacyConsolidationState(events, sessionId)
+  await persistConsolidationState(ctx, path, sessionId, {}, rebuilt).catch(() => {})
+  return rebuilt
+}
+
+/**
+ * Merge one patch into the durable state under the file lock and write it atomically. The
+ * watermark only ever advances for a result whose status allows it, so a partial failure keeps
+ * the batch for a controlled retry exactly like the legacy event log did.
+ */
+async function persistConsolidationState(
+  ctx: Context,
+  path: string,
+  sessionId: string,
+  patch: ConsolidationStatePatch,
+  initial?: ConsolidationState,
+): Promise<ConsolidationState> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+  let merged = freshConsolidationState(sessionId)
+  await withFileLock(path, async () => {
+    let current: ConsolidationState
+    try {
+      const raw = await readFile(path, 'utf8')
+      current = parseConsolidationState(JSON.parse(raw), sessionId)
+    } catch {
+      current = initial ?? freshConsolidationState(sessionId)
+    }
+    merged = mergeConsolidationState(current, patch)
+    await writeFileAtomic(path, serializeConsolidationState(merged), { mode: 0o600, dirMode: 0o700 })
+  })
+  return merged
+}
+
+/** Persist one review outcome, downgrading a write failure to a warning: committed file work
+ * stays committed and the stale on-disk watermark merely re-runs an idempotent review later. */
+async function persistResultOrWarn(
+  ctx: Context,
+  path: string,
+  sessionId: string,
+  patch: ConsolidationStatePatch,
+): Promise<void> {
+  try {
+    await persistConsolidationState(ctx, path, sessionId, patch)
+  } catch (error) {
+    ctx.logger.warn(`memory-consolidator: cannot persist consolidation state for session "${sessionId}": ${safeError(error)}`)
+  }
 }
 
 async function consolidate(
@@ -817,7 +891,10 @@ async function consolidate(
   signal: AbortSignal,
 ): Promise<boolean> {
   const events = agent.session.events
-  const eligible = collectEligibleTurns(events, lastWatermark(events), config)
+  const sessionId = String(agent.session.id)
+  const statePath = consolidationStatePath(home, sessionId)
+  const state = await loadConsolidationState(ctx, statePath, sessionId, events)
+  const eligible = collectEligibleTurns(events, state.throughSeq, config)
   const explicitRequest = eligible.some(turn => turn.explicitRemember || turn.explicitForget)
   const batchSize = consolidationReviewBatchSize(
     eligible.length,
@@ -832,13 +909,14 @@ async function consolidate(
   const throughSeq = last.endSeq
   let rawText = ''
   let snapshot: ReviewSnapshot | undefined
+  let preparedRequest: ConsolidationStateRequest | undefined
   try {
     signal.throwIfAborted()
     const now = new Date()
     const currentSnapshot = await reviewSnapshot(ctx, agent, home, now)
     snapshot = currentSnapshot
     signal.throwIfAborted()
-    if (retryBlocked(events, currentSnapshot, now)) return false
+    if (retryBlocked(state, currentSnapshot, now)) return false
     const malformed = currentSnapshot.files
       .filter(file => !file.managedRegionValid)
       .map<MemoryConsolidationTargetOutcome>(file => ({
@@ -849,21 +927,24 @@ async function consolidate(
       }))
     if (malformed.length > 0) {
       if (!canLog(ctx, agent, lifetime)) return false
-      agent.session.append('memory/consolidation-result', {
-        throughSeq,
-        status: 'failed',
-        candidates: EMPTY_CANDIDATES(),
-        outcomes: malformed,
-        retry: retryMetadata(
-          events,
-          currentSnapshot,
+      await persistResultOrWarn(ctx, statePath, sessionId, {
+        result: {
           throughSeq,
-          'malformed-managed-region',
-          'file-change',
-          config,
-          now,
-        ),
-        error: 'managed region repair is required before consolidation can continue',
+          status: 'failed',
+          candidates: EMPTY_CANDIDATES(),
+          outcomes: malformed,
+          retry: retryMetadata(
+            state,
+            currentSnapshot,
+            throughSeq,
+            'malformed-managed-region',
+            'file-change',
+            config,
+            now,
+          ),
+          error: 'managed region repair is required before consolidation can continue',
+          at: now.getTime(),
+        },
       })
       return false
     }
@@ -880,20 +961,14 @@ async function consolidate(
       }
       // The stock DSH invariant requires this field. It records the adapter-resolved
       // route limit, not a fixed cap invented by this plugin.
-      agent.session.append('memory/consolidation-request', {
+      preparedRequest = {
         throughSeq,
         sourceTurns: turns.map(turn => turn.turn),
-        sourceEventSeqs: turns.flatMap(turn => turn.sourceEventSeqs),
         route,
-        system: MEMORY_CONSOLIDATION_SYSTEM_PROMPT,
-        messages,
         maxTokens: effective.maxTokens!,
         mode: config.mode,
-        workspace: currentSnapshot.workspace,
-        files: currentSnapshot.files.map(({ target, path, contentHash, existed, managedRegionValid }) => ({
-          target, path, contentHash, existed, managedRegionValid,
-        })),
-      })
+        at: Date.now(),
+      }
     })
     const patches = parseConsolidationOutput(rawText, config)
     const candidates = materializedCandidates(currentSnapshot, patches)
@@ -921,7 +996,7 @@ async function consolidate(
     const retry = retryable.length === 0
       ? undefined
       : retryMetadata(
-          events,
+          state,
           currentSnapshot,
           throughSeq,
           JSON.stringify(retryable.map(({ target, status: targetStatus, error }) => ({
@@ -933,34 +1008,42 @@ async function consolidate(
           config,
           new Date(),
         )
-    agent.session.append('memory/consolidation-result', {
-      throughSeq,
-      status,
-      candidates,
-      outcomes,
-      ...(retry === undefined ? {} : { retry }),
+    await persistResultOrWarn(ctx, statePath, sessionId, {
+      ...(preparedRequest === undefined ? {} : { request: preparedRequest }),
+      result: {
+        throughSeq,
+        status,
+        candidates,
+        outcomes,
+        ...(retry === undefined ? {} : { retry }),
+        at: Date.now(),
+      },
     })
     return advancesConsolidationWatermark({ status, outcomes })
       && eligible.length > turns.length
   } catch (error) {
     if (signal.aborted || lifetime.aborted || !canLog(ctx, agent, lifetime)) return false
     const errorText = safeError(error)
-    agent.session.append('memory/consolidation-result', {
-      throughSeq,
-      status: 'failed',
-      candidates: EMPTY_CANDIDATES(),
-      outcomes: [],
-      retry: retryMetadata(
-        events,
-        snapshot,
+    await persistResultOrWarn(ctx, statePath, sessionId, {
+      ...(preparedRequest === undefined ? {} : { request: preparedRequest }),
+      result: {
         throughSeq,
-        errorText,
-        'backoff',
-        config,
-        new Date(),
-      ),
-      ...(rawText.length === 0 ? {} : { rawTextHash: contentHash(rawText) }),
-      error: errorText,
+        status: 'failed',
+        candidates: EMPTY_CANDIDATES(),
+        outcomes: [],
+        retry: retryMetadata(
+          state,
+          snapshot,
+          throughSeq,
+          errorText,
+          'backoff',
+          config,
+          new Date(),
+        ),
+        ...(rawText.length === 0 ? {} : { rawTextHash: contentHash(rawText) }),
+        error: errorText,
+        at: Date.now(),
+      },
     })
     ctx.logger.warn(`memory-consolidator: review failed for session "${String(agent.id)}": ${errorText}`)
     return false

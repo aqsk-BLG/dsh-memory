@@ -6,7 +6,7 @@ const required = [
   'MEMORY SCOPE',
   'session_search',
   'semantic ranking output contains unsupported block type',
-  'memory/consolidation-request',
+  'memory/consolidation-result',
   'must each be exactly {"add":[],"remove":[]}',
   'selected model route advertises no default output limit',
   'dsh-memory-consolidator:start',
@@ -14,6 +14,8 @@ const required = [
   'safe additions while retaining guarded entries',
   'managed region repair is required',
   'semantic ranking tournament made no progress',
+  'consolidation state file is malformed',
+  'memory-consolidator: cannot persist consolidation state',
 ]
 
 for (const marker of required) {

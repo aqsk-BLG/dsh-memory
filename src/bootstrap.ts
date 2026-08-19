@@ -1,8 +1,12 @@
 /**
  * Frozen per-session injection of the global memory files plus live project memory. Reads
- * `$DSH_HOME/USER.md` and `$DSH_HOME/MEMORY.md` once, registers the frozen `memory` prompt section,
- * logs its snapshot as `memory/bootstrap`, and publishes dynamic runtime context that injects the
- * explicitly bound workspace's curated memory and a compact write reminder.
+ * `$DSH_HOME/USER.md` and `$DSH_HOME/MEMORY.md` once, registers the frozen `memory` prompt
+ * section, and publishes dynamic runtime context that injects the explicitly bound workspace's
+ * curated memory and a compact write reminder.
+ *
+ * Since 1.1.0 no `memory/bootstrap` session event is appended: official DeepSeek Harness builds
+ * refuse session logs containing catalog-unknown, non-ignorable event types. A resumed session
+ * simply re-snapshots the current files when the section registers again.
  * @module dsh-memory/bootstrap
  */
 
@@ -15,10 +19,6 @@ import type {} from '@deepseek-ai/dsh-agent'
 import { readBounded, type BoundedText } from './bounded-file.ts'
 export { readBounded, type BoundedText } from './bounded-file.ts'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
-// The `memory/bootstrap` declaration lives in src/types.ts (its one home); this re-export projects
-// the type face onto the package root and keeps the module edge in the emitted index.d.ts, so
-// aggregate programs consuming the declarations still receive the SessionEventMap merge.
-export type * from './bootstrap-types.ts'
 
 /** Cordis plugin name. */
 export const name = 'memory-bootstrap'
@@ -360,12 +360,6 @@ export function apply(ctx: Context, config: Config): void {
         projectMemoryBudgetChars: config.projectMemoryBudgetChars,
         reminderEnabled: config.reminderEnabled,
       }),
-    })
-    agent.session.append('memory/bootstrap', {
-      user: user.text,
-      userTruncated: user.truncated,
-      memory: memory.text,
-      memoryTruncated: memory.truncated,
     })
   }), 'memory-bootstrap agent/created listener')
 }

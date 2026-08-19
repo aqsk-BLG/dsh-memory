@@ -1,7 +1,10 @@
 /**
- * Durable vocabulary for background memory consolidation. Both events are log-only: the request
- * records the exact auxiliary model input, while the result records validated candidates and the
- * outcome of each controlled file target.
+ * Vocabulary shared with the v1.0.x event log. Both events are LEGACY: since 1.1.0 the
+ * consolidator never appends them (official DeepSeek Harness builds refuse logs containing
+ * catalog-unknown, non-ignorable event types, and `Session.append` cannot set the ignorable
+ * marker). They are retained solely so the migration path can type legacy events read from
+ * old session logs. Durable state now lives in `$DSH_HOME/memory/consolidation/<session>.json`
+ * (see src/consolidation-state.ts).
  * @module dsh-memory/consolidator-types
  */
 
@@ -87,9 +90,9 @@ export type MemoryConsolidationResultStatus =
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
-     * Exact tools-free auxiliary request made by the background memory consolidator. The source
-     * seqs identify every turn event represented in `messages`; `throughSeq` is the candidate
-     * batch boundary used by the result watermark.
+     * LEGACY (v1.0.x) tools-free auxiliary request record. No longer appended: the compact
+     * `lastRequest` field of the consolidation state file replaces it. Declared only so the
+     * migration path can type events read from old session logs.
      */
     'memory/consolidation-request': {
       throughSeq: number
@@ -104,10 +107,10 @@ declare module '@deepseek-ai/dsh-session/types' {
       files: MemoryConsolidationFileSnapshot[]
     }
     /**
-     * Validated review output and controlled commit outcomes. Applied, noop, and proposed advance
-     * the watermark. A partial result advances only when its non-success outcomes are terminal
-     * skipped writes; a conflict or failed target retains the batch for a controlled retry.
-     * Invalid raw model output is represented only by rawTextHash.
+     * LEGACY (v1.0.x) validated review output and commit outcomes. No longer appended: the
+     * consolidation state file (`$DSH_HOME/memory/consolidation/<session>.json`) now carries the
+     * watermark, last result, and retry control. Declared only so the migration path can type
+     * events read from old session logs.
      */
     'memory/consolidation-result': {
       throughSeq: number

@@ -9,12 +9,12 @@
 预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.0.2
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.1.0
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-若希望跟随仓库最新提交，可去掉 `#v1.0.2`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+若希望跟随仓库最新提交，可去掉 `#v1.1.0`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
 
 `dsh plugin` 只更新现有 profile 的依赖元数据、锁文件、已安装模块和 `dsh.profile.bundles` 列表。它不会修改 DSH 源码，不会另建智能体或工作区，也不会重置已有会话、模型、设置、存储或工作区注册。bundle 同样不会设置 `dshHome`，因此插件与当前 DSH 实例始终使用同一个数据根：优先继承 `$DSH_HOME`；仅当该变量未设置时，才与 DSH 一起使用其默认的 `~/.dsh`。它不会同时打开两个根目录。
 
@@ -30,14 +30,33 @@ pnpm dsh plugin --profile web remove dsh-memory
 
 挂载 bundle 即组合五项内置能力与手册：
 
-- **人格文件**：初始化并注入冻结的 `$DSH_HOME/IDENTITY.md` 与 `$DSH_HOME/SOUL.md` 快照，记录为 `persona/bootstrap`。
+- **人格文件**：初始化并注入冻结的 `$DSH_HOME/IDENTITY.md` 与 `$DSH_HOME/SOUL.md` 快照。
 - **记忆 bootstrap**：注入冻结的全局 `USER.md` 与 `MEMORY.md`、实时项目 `MEMORY.md`，以及轻量每轮提醒；提醒会跳过问候、简单查询和短问答。
-- **后台记忆巩固器**：每个有效任务完成并进入空闲态后立即审核，通过冲突检查写入有界受管区块，并且只为仍然绑定的工作区幂等追加每日日志。问候和短问答会跳过；更大的批处理节奏仍可作为可选成本控制。破坏性重写被守卫拦截时，会保留旧条目并写入预算内的安全新增项；可重试的混合结果不会推进水位线，畸形受管区等待修复，瞬时失败采用退避。
+- **后台记忆巩固器**：每个有效任务完成并进入空闲态后立即审核，通过冲突检查写入有界受管区块，并且只为仍然绑定的工作区幂等追加每日日志。问候和短问答会跳过；更大的批处理节奏仍可作为可选成本控制。破坏性重写被守卫拦截时，会保留旧条目并写入预算内的安全新增项；可重试的混合结果不会推进水位线，畸形受管区等待修复，瞬时失败采用退避。水位线与重试控制基于文件持久化（见下方“持久化模型”）。
 - **混合会话搜索**：有模型路由时对有界既往会话 surface 进行语义排序，大型锦标赛允许合法空分片，并提供明确标注的全文回退。
 - **压缩后 flush**：压缩后排入提醒，把重要上下文写入当前允许的记忆层。
 - 随包的 `memory` runtime skill：说明文件职责、该记录和跳过什么、仅追加每日日志、语义回忆与 30 天蒸馏规则。项目或 preset 可用同名 skill 覆盖它。
 
 独立构建会把五项能力编译进同一个 `lib/index.js`，运行时只把 DSH 主程序包作为 peer。人格文件在内部仍是独立身份关注点，只是 facade 将它与记忆一并安装。
+
+## 持久化模型
+
+自 v1.1.0 起，dsh-memory **不再写入任何自定义会话事件**。官方 DeepSeek Harness 构建会拒绝解释包含目录外事件类型的会话日志——除非该事件携带 `ignorable` 信封标记（SessionFormatUnsupportedError），而 `Session.append` 无法设置该标记——因此持久化状态绝不能依赖自定义目录事件。本插件从不追加 `memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request` 或 `memory/consolidation-result`，纯官方 DSH 上的社区用户不会再遇到该拒绝。
+
+文件化状态位于当前 DSH 数据根下：
+
+- `$DSH_HOME/memory/consolidation/<session-id>.json` — 每个会话的巩固状态：持久水位线（被推进性审核完全覆盖的最高轮次 `endSeq`）、最近一次审核结果（状态、各目标结果、重试控制、错误）以及最近一次已准备审核请求的紧凑记录。每次审核后原子写入；只有状态允许推进的结果才会推进水位线，因此部分失败会像 v1.0.x 事件日志一样保留批次受控重试。
+- `$DSH_HOME/USER.md`、`$DSH_HOME/MEMORY.md`、`$DSH_HOME/IDENTITY.md`、`$DSH_HOME/SOUL.md` — 与现在完全相同，记忆文件内的受管区块行为不变。
+
+v1.0.x 写入的会话仍带有旧事件。当宿主 harness 能解码它们时（例如带旧词汇的补丁构建），插件会在首次加载时把最后的旧 result/request 事件折叠进新状态文件，此后只写文件。由于序号稳定、每日追加按标记幂等、受管区块对未变更条目重写为 noop，重建水位线是安全的。
+
+v1.0.x 写入的日志在把旧事件标记为可忽略或删除前，无法被原版 harness 重新打开。停止 DSH 后执行：
+
+```sh
+node scripts/migrate-legacy-events.mjs "$DSH_HOME/sessions" --apply
+```
+
+Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 `--harness-source <deepseek-harness 源码路径>`。默认 dry-run 只报告将要修改的内容；每个被重写的日志旁会留下备份。
 
 ## 工作区权威
 
@@ -126,11 +145,11 @@ pnpm dsh plugin --profile web remove dsh-memory
 
 ## 已知限制与暂缓工作
 
-- **每会话冻结 home 文件**：对 `IDENTITY.md`、`SOUL.md`、`USER.md` 或全局 `MEMORY.md` 的编辑，只会在新会话进入已有模型上下文。
+- **每会话冻结 home 文件**：对 `IDENTITY.md`、`SOUL.md`、`USER.md` 或全局 `MEMORY.md` 的编辑，只会在新会话进入已有模型上下文（v1.0.x 额外写每会话快照事件；v1.1.0 直接读文件，恢复的会话会重新快照当前文件）。
 - **不注入每日日志**：即使项目长期记忆保持实时，带日期的项目历史仍按需读取。
 - **尚无历史每日日志蒸馏**：后台整理器审核新完成的轮次；30 天每日日志蒸馏仍是手动维护规则。
 - **Proposal 模式仅供检查**：没有稍后 approve／apply 的命令或 UI。
-- **删除保护产生的 proposal 需人工处理**：automatic 模式会写入预算内的安全新增项，同时保留被保护的旧条目；物化后的候选列表与目标结果仍保存在会话事件中。若“保留旧条目＋全部新增项”会超过目标预算，则不写文件，proposal 仅供检查。
+- **删除保护产生的 proposal 需人工处理**：automatic 模式会写入预算内的安全新增项，同时保留被保护的旧条目；物化后的候选列表与目标结果保存在巩固状态文件中。若“保留旧条目＋全部新增项”会超过目标预算，则不写文件，proposal 仅供检查。
 - **语义候选对 provider 可见**：语义回忆会把有界既往会话片段发送给所选模型 provider；若只需本地全文回忆，请关闭该功能。
 - **没有跨设备语料或云同步**：会话发现与全文回退使用已组合的 DSH session-query 存储；云同步仍是可选未来层。
 

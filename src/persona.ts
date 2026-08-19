@@ -1,6 +1,10 @@
 /**
  * Harness-home persona files injected as one frozen per-session system-prompt section.
  *
+ * Since 1.1.0 no `persona/bootstrap` session event is appended: official DeepSeek Harness builds
+ * refuse session logs containing catalog-unknown, non-ignorable event types. A resumed session
+ * simply re-snapshots the current files when the section registers again.
+ *
  * @module dsh-memory/persona
  */
 
@@ -10,7 +14,6 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-agent'
-export type * from './persona-types.ts'
 
 /** Cordis plugin name. */
 export const name = 'persona-files'
@@ -184,12 +187,6 @@ export function apply(ctx: Context, config: Config): void {
         config.identityBudgetChars,
         config.soulBudgetChars,
       ),
-    })
-    agent.session.append('persona/bootstrap', {
-      identity: identity.text,
-      identityTruncated: identity.truncated,
-      soul: soul.text,
-      soulTruncated: soul.truncated,
     })
   }), 'persona-files agent/created listener')
 }

@@ -9,12 +9,12 @@ An installable DSH profile bundle for WorkBuddy-style layered memory: global per
 The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.0.2
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.1.0
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.0.2` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.1.0` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
 
 `dsh plugin` updates only the existing profile's dependency metadata, lockfile, installed modules, and `dsh.profile.bundles` list. It does not modify the DSH source tree, create another agent or workspace, or reset existing sessions, models, settings, storage, or workspace registrations. The bundle also leaves `dshHome` unset, so the plugin uses the exact same single data root as the DSH instance: inherited `$DSH_HOME`, or DSH's own `~/.dsh` default only when that variable is unset. It never opens both roots.
 
@@ -30,14 +30,33 @@ The public repository is discoverable through GitHub's [`dsh-plugin` topic](http
 
 Mounting the bundle composes five bundled capabilities and the guide:
 
-- **Persona files** — seeds and injects frozen `$DSH_HOME/IDENTITY.md` and `$DSH_HOME/SOUL.md` snapshots, logged as `persona/bootstrap`.
+- **Persona files** — seeds and injects frozen `$DSH_HOME/IDENTITY.md` and `$DSH_HOME/SOUL.md` snapshots.
 - **Memory bootstrap** — injects frozen global `USER.md` and `MEMORY.md`, live project `MEMORY.md`, and a lightweight every-turn reminder that skips greetings, simple lookups, and short Q&A.
-- **Background consolidator** — reviews each eligible completed task on the next idle transition, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. Greetings and short Q&A are skipped; a larger batching cadence remains an opt-in cost control. A guarded destructive rewrite retains old entries while applying bounded safe additions; retryable mixed results retain their watermark, malformed regions wait for repair, and transient failures back off.
+- **Background consolidator** — reviews each eligible completed task on the next idle transition, writes bounded managed regions with conflict checks, and appends idempotent daily project notes only for the still-bound workspace. Greetings and short Q&A are skipped; a larger batching cadence remains an opt-in cost control. A guarded destructive rewrite retains old entries while applying bounded safe additions; retryable mixed results retain their watermark, malformed regions wait for repair, and transient failures back off. The watermark and retry control are file-backed (see Durability model below).
 - **Hybrid session search** — semantically ranks bounded past-session surfaces when a model route is available, accepts legitimate empty shards in large tournaments, and provides an explicitly labeled full-text fallback.
 - **Compaction flush** — queues a post-compaction reminder to persist important context at the permitted memory layer.
 - A bundled `memory` runtime skill — explains file roles, what to record and skip, append-only daily logs, semantic recall, and the 30-day distillation rule. A project or preset may override it with a same-named skill.
 
 The standalone build compiles all five capabilities into one `lib/index.js` and leaves only DSH host packages as runtime peers. Persona files remain a separate identity concern internally even though the facade installs them together with memory.
+
+## Durability model
+
+Since v1.1.0 dsh-memory writes **no custom session events**. Official DeepSeek Harness builds refuse to interpret session logs containing event types outside their catalog unless the event carries the `ignorable` envelope marker (`SessionFormatUnsupportedError`), and `Session.append` cannot set that marker — so durable state must not depend on custom catalog events. Community users on a pure official DSH never hit the refusal because this plugin never appends `memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, or `memory/consolidation-result`.
+
+File-backed state instead lives under the active DSH home:
+
+- `$DSH_HOME/memory/consolidation/<session-id>.json` — per-session consolidation state: the durable watermark (highest turn `endSeq` fully covered by an advancing review), the last review result (status, outcomes, retry control, error), and a compact record of the last prepared review request. Written atomically after each review; the watermark advances only for results whose status allows it, so a partial failure keeps the batch for a controlled retry exactly like the v1.0.x event log did.
+- `$DSH_HOME/USER.md`, `$DSH_HOME/MEMORY.md`, `$DSH_HOME/IDENTITY.md`, `$DSH_HOME/SOUL.md` — unchanged, as today. Managed regions inside memory files keep working exactly as before.
+
+Sessions written by v1.0.x still carry the legacy events. When a hosting harness can already decode them (for example a patched build with the old vocabulary), the plugin folds the last legacy result/request events into a fresh state file on first load and then writes only files. Because sequence numbers are stable, daily appends are idempotent per marker, and managed-region rewrites of unchanged entries are noops, a rebuilt watermark is safe.
+
+Sessions whose logs were written by v1.0.x cannot be reopened by a stock harness until the legacy events are marked ignorable or stripped. With DSH stopped, run:
+
+```sh
+node scripts/migrate-legacy-events.mjs "$DSH_HOME/sessions" --apply
+```
+
+Zstandard-compressed logs need the harness source for its internal codec: add `--harness-source <path-to-deepseek-harness-checkout>`. The default dry-run reports what would change; backups are written next to each rewritten log.
 
 ## Workspace authority
 
@@ -126,11 +145,11 @@ This package is a standalone distribution of `packages/memory/*` and `packages/i
 
 ## Known Limitations and Deferred Work
 
-- **Frozen home files per session** — edits to `IDENTITY.md`, `SOUL.md`, `USER.md`, or global `MEMORY.md` enter existing model context only in a new session.
+- **Frozen home files per session** — edits to `IDENTITY.md`, `SOUL.md`, `USER.md`, or global `MEMORY.md` enter existing model context only in a new session (v1.0.x additionally logged per-session snapshot events; v1.1.0 reads the files directly and a resumed session re-snapshots them).
 - **No daily-log injection** — dated project history remains on-demand even though curated project memory is live.
 - **No historical daily-log distillation yet** — the background consolidator reviews newly completed turns; 30-day daily-log distillation remains a manual maintenance rule.
 - **Proposal mode is inspection-only** — there is no later approve/apply command or UI.
-- **Deletion guard proposals require manual follow-up** — in automatic mode, bounded safe additions are written while guarded old entries are retained; the materialized candidate and target outcome remain in session events. If retaining old entries plus every addition would exceed the target budget, nothing is written and the proposal remains inspection-only.
+- **Deletion guard proposals require manual follow-up** — in automatic mode, bounded safe additions are written while guarded old entries are retained; the materialized candidates and target outcomes remain in the consolidation state file. If retaining old entries plus every addition would exceed the target budget, nothing is written and the proposal remains inspection-only.
 - **Provider-visible semantic candidates** — semantic recall sends bounded past-session excerpts to the selected model provider; disable it for local full-text-only recall.
 - **No cross-device corpus or cloud sync** — session discovery and full-text fallback use the composed DSH session-query store; cloud synchronization remains an optional future layer.
 
