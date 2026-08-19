@@ -9,12 +9,12 @@
 预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.1.0
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.0
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-若希望跟随仓库最新提交，可去掉 `#v1.1.0`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+若希望跟随仓库最新提交，可去掉 `#v1.2.0`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
 
 `dsh plugin` 只更新现有 profile 的依赖元数据、锁文件、已安装模块和 `dsh.profile.bundles` 列表。它不会修改 DSH 源码，不会另建智能体或工作区，也不会重置已有会话、模型、设置、存储或工作区注册。bundle 同样不会设置 `dshHome`，因此插件与当前 DSH 实例始终使用同一个数据根：优先继承 `$DSH_HOME`；仅当该变量未设置时，才与 DSH 一起使用其默认的 `~/.dsh`。它不会同时打开两个根目录。
 
@@ -25,6 +25,45 @@ pnpm dsh plugin --profile web remove dsh-memory
 ```
 
 公开仓库可从 GitHub 的 [`dsh-plugin` topic](https://github.com/topics/dsh-plugin)发现。
+
+## 宿主版本支持
+
+加载时 facade 会把 DeepSeek Harness 的发布版本与支持下限做比对。版本来源：与插件安装在同一处的 `@deepseek-ai/*` 包清单（官方发布全部同版本号，如 `0.1.0-rc.7`），或显式的 `DSH_VERSION` 环境变量。
+
+- **测试下限：`0.1.0-rc.7`。**本插件用到的全部 peer API（`agent/created`、system-prompt section、工作区注册表、session-query 注入、压缩后 flush）都在该版本上验证过。
+- **等于或高于下限**——只打一行 info 日志，无其他影响。
+- **低于下限**——facade 拒绝加载，报错会同时写明检测到的版本与要求的版本。只有维护兼容 fork 时才可降到 `versionGate: 'warn'`（或 `'off'` 关闭）。
+- **版本无法检测或无法解析**——仅警告并继续运行。未知版本不能证明不兼容，因此隐藏版本号绝不会导致插件崩溃。
+
+## 首次运行
+
+当 `$DSH_HOME` 下还没有 `USER.md`、`MEMORY.md`、`IDENTITY.md` 或 `SOUL.md` 时，插件会以独占创建方式写入简短的起始模板：纯 Markdown、无 `<!-- -->` 注释，并说明每个文件的作用。已有文件绝不覆盖、重命名或重排格式，已有会话也绝不改写。首次运行不强制任何其他操作：不建记忆索引、不整理历史、不写其他文件，只有那四个小文件，加上首次搜索时才懒加载打开的 `session-query.sqlite` 索引。可用 `seedMissingPersonaFiles` / `seedMissingMemoryFiles` 关闭模板初始化。
+
+## 与其他插件、模型共存
+
+- **轻量 cordis patch。**bundle 的 `cordis.patch.yml` 只插入 `memory` 行和 `session-query-sqlite` 行（首次搜索时才在 `$DSH_HOME/session-query.sqlite` 懒加载打开）。后续 profile 与 home patch 仍然生效并可覆盖这两行；移除依赖即移除两者。
+- **不写自定义会话事件。**自 v1.1.0 起插件不再追加官方目录外的事件，原版 harness 不会拒绝其会话，其他插件的事件处理也不受影响。
+- **其他插件行不受干扰。**facade 只注册 `memory` 一个名字和 `skills` 注入；内部部件使用带前缀的名字（`persona-files`、`memory-bootstrap`、`tool-session-search`、`memory-flush`、`memory-consolidator`）。项目或 preset 可用同名 skill 覆盖随包的 `memory` skill。
+- **共享模型路由。**语义回忆与后台整理默认复用当前会话的模型路由；专用 `semanticProvider`/`semanticModel` 与 `consolidationProvider`/`consolidationModel` 均可选，且不会改动其他插件的路由。关闭 `semanticEnabled` 后回忆完全本地化、仅全文检索。
+- **不产生第二个数据根。**bundle 不设置 `dshHome`，始终与宿主 DSH 实例使用同一个 home。
+
+## 从 v1.0.x 迁移
+
+v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request`、`memory/consolidation-result`）。v1.1.0 已改为文件化状态，v1.2.0 沿用该模型。升级步骤：
+
+1. 停止 DSH。
+2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.2.0`）；若暂不升级插件，也可只执行下面的旧事件清理。
+3. 旧事件被标记为可忽略或删除前，原版 harness 无法重新打开 v1.0.x 日志。停止 DSH 后执行：
+
+   ```sh
+   node scripts/migrate-legacy-events.mjs "$DSH_HOME/sessions" --apply
+   ```
+
+   Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 `--harness-source <deepseek-harness 源码路径>`。默认 dry-run 只报告将要修改的内容；每个被重写的日志旁会留下备份。
+4. 首次加载时，插件会把尚存的旧 `memory/consolidation-result`/`-request` 事件折叠进全新的每会话巩固状态文件 `$DSH_HOME/memory/consolidation/<session-id>.json`（安全：序号稳定、每日追加按标记幂等、未变更受管区块重写为 noop），此后只写文件。
+5. 启动 DSH，确认日志中出现了报告检测到宿主版本的那一行。
+
+完整状态布局见[持久化模型](#持久化模型)。
 
 ## 功能
 
@@ -69,6 +108,7 @@ Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 
 | 键 | 默认值 | 含义 |
 |---|---|---|
 | `dshHome` | 不设置 | 仅供高级显式覆盖。通常必须留空，使插件沿用 DSH 已选择的同一个根：优先 `$DSH_HOME`，否则才是 DSH 默认的 `~/.dsh` |
+| `versionGate` | `error` | 加载时的宿主版本门：`error` 在低于 `0.1.0-rc.7` 的宿主上大声失败，`warn` 只记日志，`off` 关闭检查 |
 | `memoryBudgetChars` | `4000` | 全局 `MEMORY.md` 的码点预算 |
 | `userBudgetChars` | `1500` | 全局 `USER.md` 的码点预算 |
 | `projectMemoryBudgetChars` | `3000` | 实时项目 `MEMORY.md` 的码点预算 |
@@ -77,6 +117,7 @@ Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 
 | `identityBudgetChars` | `4000` | `IDENTITY.md` 的码点预算 |
 | `soulBudgetChars` | `4000` | `SOUL.md` 的码点预算 |
 | `seedMissingPersonaFiles` | `true` | 人格文件缺失时初始化保守默认内容 |
+| `seedMissingMemoryFiles` | `true` | `USER.md`/`MEMORY.md` 缺失时初始化简短模板；绝不覆盖 |
 | `personaSectionOrder` | `-50` | 位于部署 persona 之前的人格文件提示词顺序 |
 | `maxHits` | `20` | 单次 `session_search` 最多返回的会话数 |
 | `semanticEnabled` | `true` | 有模型路由时使用语义排序 |
@@ -138,8 +179,9 @@ Zstandard 压缩日志需要 harness 源码提供其内部编解码器：追加 
 
 ## 运行要求与来源
 
-- 当前版本的 DeepSeek Harness，并由它提供声明的 `@deepseek-ai/*` peer 包。
+- DeepSeek Harness `>= 0.1.0-rc.7`（在 `0.1.0-rc.7` 上测试），由它提供声明的 `@deepseek-ai/*` peer 包。更旧的宿主默认会被加载期版本门拦下；详见[宿主版本支持](#宿主版本支持)。
 - Node `^22.19.0 || >=24`。
+- CI 在 Node 22 与 24 上对每次 push 与 PR 运行 `pnpm check`（类型检查、bundle 构建与各策略检查脚本）。
 
 本包是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 中 `packages/memory/*` 与 `packages/identity/persona-files` 的独立发行版，采用 MIT 许可证。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

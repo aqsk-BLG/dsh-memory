@@ -12,11 +12,13 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 // Type-only: `agent/created` is declared on the scoped agent context.
 import type {} from '@deepseek-ai/dsh-agent'
 import { readBounded, type BoundedText } from './bounded-file.ts'
+import { seedFile } from './persona.ts'
 export { readBounded, type BoundedText } from './bounded-file.ts'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 
@@ -40,6 +42,8 @@ export interface Config {
   projectMemoryBudgetChars: number
   /** Include the compact memory-write reminder in every runtime-context snapshot. */
   reminderEnabled: boolean
+  /** Create short `USER.md` and `MEMORY.md` templates when absent; never overwrites. */
+  seedMissingFiles: boolean
   /** Prompt-section order; the section renders after `deployment:persona` (order 0). */
   sectionOrder: number
 }
@@ -51,6 +55,7 @@ export const Config: z<Config> = z.object({
   userBudgetChars: z.number().default(1500),
   projectMemoryBudgetChars: z.number().default(3000),
   reminderEnabled: z.boolean().default(true),
+  seedMissingFiles: z.boolean().default(true),
   sectionOrder: z.number().default(5),
 })
 
@@ -62,6 +67,24 @@ export const DEFAULT_USER_BUDGET_CHARS = 1500
 export const DEFAULT_PROJECT_MEMORY_BUDGET_CHARS = 3000
 /** Default prompt-section order for the `memory` section. */
 export const DEFAULT_SECTION_ORDER = 5
+
+/** Default `USER.md` template seeded into a new Harness home. */
+export const DEFAULT_USER = `\
+# USER.md
+
+Tell your agent who you are, how you work, and what you prefer.
+Keep it short: this file is injected into every session.
+`
+
+/** Default `MEMORY.md` template seeded into a new Harness home. */
+export const DEFAULT_MEMORY = `\
+# MEMORY.md
+
+Global memory shared across all projects. Add durable cross-project facts here.
+The background consolidator maintains only the region between the
+\`<!-- dsh-memory-consolidator:start -->\` and \`<!-- dsh-memory-consolidator:end -->\` markers;
+keep manual text outside it.
+`
 
 /** The prompt-section name the bootstrap registers in the agent scope. */
 export const MEMORY_SECTION = 'memory'
@@ -340,6 +363,15 @@ export function apply(ctx: Context, config: Config): void {
   const home = resolveDshHome(config.dshHome)
   const memoryPath = join(home, 'MEMORY.md')
   const userPath = join(home, 'USER.md')
+  if (config.seedMissingFiles) {
+    const before = [userPath, memoryPath].filter(path => !existsSync(path))
+    seedFile(userPath, DEFAULT_USER)
+    seedFile(memoryPath, DEFAULT_MEMORY)
+    for (const path of before) {
+      ctx.logger.info(`dsh-memory: seeded a starter template at ${JSON.stringify(path)} `
+        + '(edit freely; it is never overwritten)')
+    }
+  }
   // Registered on the root so the listener hears every published agent, including agents created
   // by compositions that mount this package as a nested child of another plugin.
   ctx.effect(() => ctx.root.on('agent/created', ({ agent }) => {

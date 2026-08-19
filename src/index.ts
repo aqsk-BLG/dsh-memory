@@ -16,6 +16,7 @@ import * as MemoryBootstrap from './bootstrap.ts'
 import * as MemoryConsolidator from './consolidator.ts'
 import * as MemoryFlush from './flush.ts'
 import * as ToolSessionSearch from './search.ts'
+import { enforceHostVersionGate, type VersionGateMode } from './host-version.ts'
 import type {} from '@deepseek-ai/dsh-skill'
 import { MEMORY_SKILL_CONTENT, MEMORY_SKILL_DESCRIPTION, MEMORY_SKILL_NAME } from './skill.ts'
 
@@ -31,6 +32,8 @@ export const inject = ['skills']
 export interface Config {
   /** Harness home containing `USER.md` and `MEMORY.md`; defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
+  /** Host-version gate at load: `error` (default), `warn`, or `off`. */
+  versionGate: VersionGateMode
   /** Code-point budget for the injected `MEMORY.md` snapshot; overflow is truncated. */
   memoryBudgetChars: number
   /** Code-point budget for the injected `USER.md` snapshot; overflow is truncated. */
@@ -47,6 +50,8 @@ export interface Config {
   soulBudgetChars: number
   /** Seed default persona files when either is missing. */
   seedMissingPersonaFiles: boolean
+  /** Seed short `USER.md`/`MEMORY.md` templates when missing; never overwrites. */
+  seedMissingMemoryFiles: boolean
   /** Prompt order for the persona-files section. */
   personaSectionOrder: number
   /** Maximum sessions one `session_search` call may return. */
@@ -106,6 +111,7 @@ export interface Config {
 /** Runtime schema for the memory facade. */
 export const Config: z<Config> = z.object({
   dshHome: z.string(),
+  versionGate: z.union(['error', 'warn', 'off'] as const).default('error'),
   memoryBudgetChars: z.number().default(4000),
   userBudgetChars: z.number().default(1500),
   projectMemoryBudgetChars: z.number().default(3000),
@@ -114,6 +120,7 @@ export const Config: z<Config> = z.object({
   identityBudgetChars: z.number().default(4000),
   soulBudgetChars: z.number().default(4000),
   seedMissingPersonaFiles: z.boolean().default(true),
+  seedMissingMemoryFiles: z.boolean().default(true),
   personaSectionOrder: z.number().default(-50),
   maxHits: z.number().default(20),
   semanticEnabled: z.boolean().default(true),
@@ -160,6 +167,7 @@ export const DEFAULT_MAX_HITS = 20
  * @param config - the flattened facade configuration.
  */
 export function apply(ctx: Context, config: Config): void {
+  enforceHostVersionGate(ctx.logger, config.versionGate)
   ctx.plugin(PersonaFiles, {
     ...(config.dshHome === undefined ? {} : { dshHome: config.dshHome }),
     identityBudgetChars: config.identityBudgetChars,
@@ -173,6 +181,7 @@ export function apply(ctx: Context, config: Config): void {
     userBudgetChars: config.userBudgetChars,
     projectMemoryBudgetChars: config.projectMemoryBudgetChars,
     reminderEnabled: config.reminderEnabled,
+    seedMissingFiles: config.seedMissingMemoryFiles,
     sectionOrder: config.memorySectionOrder,
   })
   ctx.plugin(ToolSessionSearch, {

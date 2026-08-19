@@ -9,12 +9,12 @@ An installable DSH profile bundle for WorkBuddy-style layered memory: global per
 The expected user already runs an [official DeepSeek Harness source checkout](https://github.com/deepseek-ai/deepseek-harness) and may already have chats, model/provider settings, workspaces, and a `web` profile. Stop the running DSH process, then run the install from that same checkout root and from an environment with the same `DSH_HOME` used to start DSH:
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.1.0
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.2.0
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.1.0` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
+Use `github:aqsk-BLG/dsh-memory` to follow the repository head, or replace the `v1.2.0` tag with an exact commit SHA for the strongest reproducibility. A globally installed CLI may use `dsh ...` instead of `pnpm dsh ...`.
 
 `dsh plugin` updates only the existing profile's dependency metadata, lockfile, installed modules, and `dsh.profile.bundles` list. It does not modify the DSH source tree, create another agent or workspace, or reset existing sessions, models, settings, storage, or workspace registrations. The bundle also leaves `dshHome` unset, so the plugin uses the exact same single data root as the DSH instance: inherited `$DSH_HOME`, or DSH's own `~/.dsh` default only when that variable is unset. It never opens both roots.
 
@@ -25,6 +25,45 @@ pnpm dsh plugin --profile web remove dsh-memory
 ```
 
 The public repository is discoverable through GitHub's [`dsh-plugin` topic](https://github.com/topics/dsh-plugin).
+
+## Host version support
+
+On load the facade checks the DeepSeek Harness release version against a floor. The version is read from the lockstep `@deepseek-ai/*` package manifests installed next to the plugin (the official releases all carry the same version string) or from an explicit `DSH_VERSION` environment variable.
+
+- **Tested floor: `0.1.0-rc.7`.** All peer APIs this plugin uses (`agent/created`, system-prompt sections, the workspace registry, session-query injection, compaction flush) were validated against this release.
+- **At or above the floor** — one info log line, nothing else.
+- **Below the floor** — the facade fails to load with a loud error naming the detected and required versions. Downgrade to a warning with `versionGate: 'warn'` (or silence with `'off'`) only if you maintain a compatible fork.
+- **Version undetectable or unparseable** — warn and continue. An unknown version is not proof of incompatibility, so a hidden version never hard-crashes the plugin.
+
+## First run
+
+When `$DSH_HOME` does not yet contain `USER.md`, `MEMORY.md`, `IDENTITY.md`, or `SOUL.md`, the plugin seeds short starter templates with `<!-- -->`-free plain Markdown and a comment explaining each file's role. Seeding is exclusive-create: existing files are never overwritten, renamed, or reformatted, and no existing session is touched. Nothing else is forced on a first run — no memory build, no history consolidation, and no writes beyond those four small files plus the lazy `session-query.sqlite` index that opens on the first search. Templates can be disabled with `seedMissingPersonaFiles` / `seedMissingMemoryFiles`.
+
+## Coexistence with other plugins and models
+
+- **Thin cordis patch.** The bundle's `cordis.patch.yml` only inserts the `memory` row and the `session-query-sqlite` row (lazily opened at `$DSH_HOME/session-query.sqlite` on the first search). Profile and home patch layers still apply afterwards and may override either row. Removing the dependency removes both.
+- **No custom session events.** Since v1.1.0 the plugin appends no events outside the official catalog, so stock harnesses never refuse its sessions and other plugins' event handling is unaffected.
+- **Other plugins keep their rows.** The facade registers under the single `memory` name and the `skills` injection; internal parts use namespaced names (`persona-files`, `memory-bootstrap`, `tool-session-search`, `memory-flush`, `memory-consolidator`). A project or preset can override the bundled `memory` skill with a same-named skill.
+- **Model-route sharing.** Semantic recall and background consolidation reuse the session's current model route by default; dedicated `semanticProvider`/`semanticModel` and `consolidationProvider`/`consolidationModel` pairs are optional and never reconfigure other plugins' routes. Disabling `semanticEnabled` keeps recall local and full-text-only.
+- **No second data root.** The bundle leaves `dshHome` unset and always resolves the same home the hosting DSH instance uses.
+
+## Migrating from v1.0.x
+
+v1.0.x wrote four custom session events (`memory/bootstrap`, `persona/bootstrap`, `memory/consolidation-request`, `memory/consolidation-result`). v1.1.0 replaced them with file-backed state; v1.2.0 keeps that model. Upgrade steps:
+
+1. Stop DSH.
+2. Install the new tag (`github:aqsk-BLG/dsh-memory#v1.2.0`), or keep the running version and just strip the legacy events below.
+3. Stock harnesses refuse to reopen v1.0.x logs until the legacy events are marked ignorable or stripped. With DSH stopped, run:
+
+   ```sh
+   node scripts/migrate-legacy-events.mjs "$DSH_HOME/sessions" --apply
+   ```
+
+   Zstandard-compressed logs need the harness source for its internal codec: add `--harness-source <path-to-deepseek-harness-checkout>`. The default dry-run reports what would change; backups are written next to each rewritten log.
+4. On first load the plugin folds any surviving legacy `memory/consolidation-result`/`-request` events into a fresh per-session consolidation state file under `$DSH_HOME/memory/consolidation/<session-id>.json` (safe: sequence numbers are stable, daily appends are idempotent per marker, and unchanged managed-region rewrites are noops), then writes only files from then on.
+5. Start DSH and verify the log line naming the detected host version.
+
+See [Durability model](#durability-model) for the full state layout.
 
 ## What it does
 
@@ -69,6 +108,7 @@ A session with no matching membership — including the Web UI's Ungrouped group
 | Key | Default | Meaning |
 |---|---|---|
 | `dshHome` | unset | Advanced explicit override only. Normally omit it so the plugin uses the same root already selected by DSH: `$DSH_HOME`, otherwise DSH's default `~/.dsh` |
+| `versionGate` | `error` | Host-version gate at load: `error` fails loud on hosts below `0.1.0-rc.7`, `warn` logs instead, `off` disables the check |
 | `memoryBudgetChars` | `4000` | Code-point budget for global `MEMORY.md` |
 | `userBudgetChars` | `1500` | Code-point budget for global `USER.md` |
 | `projectMemoryBudgetChars` | `3000` | Code-point budget for live project `MEMORY.md` |
@@ -77,6 +117,7 @@ A session with no matching membership — including the Web UI's Ungrouped group
 | `identityBudgetChars` | `4000` | Code-point budget for `IDENTITY.md` |
 | `soulBudgetChars` | `4000` | Code-point budget for `SOUL.md` |
 | `seedMissingPersonaFiles` | `true` | Seed conservative persona defaults when absent |
+| `seedMissingMemoryFiles` | `true` | Seed short `USER.md`/`MEMORY.md` templates when absent; never overwrites |
 | `personaSectionOrder` | `-50` | Persona-file prompt order before deployment persona |
 | `maxHits` | `20` | Maximum sessions one `session_search` call may return |
 | `semanticEnabled` | `true` | Use semantic ranking when a model route is available |
@@ -138,8 +179,9 @@ Persona and global sections are frozen per session and prefix-stable. Workspace 
 
 ## Requirements and provenance
 
-- A current DeepSeek Harness installation providing the declared `@deepseek-ai/*` peer packages.
+- DeepSeek Harness `>= 0.1.0-rc.7` (tested on `0.1.0-rc.7`) providing the declared `@deepseek-ai/*` peer packages. Older hosts fail the load-time version gate by default; see [Host version support](#host-version-support).
 - Node `^22.19.0 || >=24`.
+- CI runs `pnpm check` (typecheck, bundle build, and the policy check scripts) on Node 22 and 24 for every push and pull request.
 
 This package is a standalone distribution of `packages/memory/*` and `packages/identity/persona-files` from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), licensed under MIT. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
