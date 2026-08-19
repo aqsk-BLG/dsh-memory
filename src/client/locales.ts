@@ -20,7 +20,7 @@ export type MemoryLocaleKey =
 /** English copy. One line per official card field. */
 export const en: Record<MemoryLocaleKey, string> = {
   title: 'File memory',
-  description: 'Layered file memory. Edit USER, MEMORY, IDENTITY, and SOUL.',
+  description: 'Layered file memory. Edit AGENTS, SOUL, IDENTITY, USER, and MEMORY.',
   expand: 'Show settings',
   collapse: 'Hide settings',
   unsaved: 'Unsaved',
@@ -40,7 +40,7 @@ export const en: Record<MemoryLocaleKey, string> = {
   none: 'None yet',
   loading: 'Loading…',
   filesTitle: 'Core files',
-  filesHint: 'USER and MEMORY saves validate the consolidator managed region.',
+  filesHint: 'AGENTS maps the DSH source-tree workspace file. USER and MEMORY saves validate the consolidator managed region.',
   saveFile: 'Save file',
   reload: 'Reload',
   missing: 'Missing',
@@ -76,7 +76,7 @@ export const en: Record<MemoryLocaleKey, string> = {
 /** Simplified Chinese copy. Matches official plugin-card tone. */
 export const zh: Record<MemoryLocaleKey, string> = {
   title: '文件记忆',
-  description: '分层文件记忆。可编辑 USER / MEMORY / IDENTITY / SOUL。',
+  description: '分层文件记忆。可编辑 AGENTS / SOUL / IDENTITY / USER / MEMORY。',
   expand: '展开设置',
   collapse: '收起设置',
   unsaved: '未保存',
@@ -96,7 +96,7 @@ export const zh: Record<MemoryLocaleKey, string> = {
   none: '还没有',
   loading: '读取中…',
   filesTitle: '核心文件',
-  filesHint: '保存 USER / MEMORY 时会校验 consolidator 受管区。',
+  filesHint: 'AGENTS 映射本体仓库根 AGENTS.md。保存 USER / MEMORY 时会校验 consolidator 受管区。',
   saveFile: '保存文件',
   reload: '重新加载',
   missing: '缺失',

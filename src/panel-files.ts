@@ -1,17 +1,21 @@
 /**
- * Read/write helpers for the settings-card file panel. These four home files
- * are the only v1 editor targets. USER/MEMORY keep the consolidator managed
- * region valid; IDENTITY/SOUL are whole-file human owned.
+ * Read/write helpers for the settings-card file panel.
+ * USER/MEMORY keep the consolidator managed region valid.
+ * IDENTITY/SOUL are whole-file human owned under $DSH_HOME.
+ * AGENTS maps the DSH source tree (本体), not the runtime home.
+ * AGENTS.md is the repo-root workspace instruction file DSH already injects.
+ * No OpenClaw-style tools cheat-sheet tab: DSH does not inject one.
  */
 import { createHash } from 'node:crypto'
 import { existsSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { inspectManagedRegion } from './managed-region.ts'
 
 /** Stable ids shown as chips on the settings card. */
-export type MemoryPanelFileId = 'identity' | 'soul' | 'user' | 'memory'
+export type MemoryPanelFileId = 'identity' | 'soul' | 'user' | 'memory' | 'agents'
 
 /** One catalog row for the file chip list. */
 export interface MemoryPanelFileInfo {
@@ -38,12 +42,41 @@ export interface MemoryPanelWriteResult {
   file?: MemoryPanelFileContent
 }
 
-const FILES: readonly { id: MemoryPanelFileId, name: string, managed: boolean }[] = [
-  { id: 'identity', name: 'IDENTITY.md', managed: false },
-  { id: 'soul', name: 'SOUL.md', managed: false },
-  { id: 'user', name: 'USER.md', managed: true },
-  { id: 'memory', name: 'MEMORY.md', managed: true },
+type FileRoot = 'home' | 'source'
+
+const FILES: readonly { id: MemoryPanelFileId, name: string, managed: boolean, root: FileRoot }[] = [
+  { id: 'agents', name: 'AGENTS.md', managed: false, root: 'source' },
+  { id: 'soul', name: 'SOUL.md', managed: false, root: 'home' },
+  { id: 'identity', name: 'IDENTITY.md', managed: false, root: 'home' },
+  { id: 'user', name: 'USER.md', managed: true, root: 'home' },
+  { id: 'memory', name: 'MEMORY.md', managed: true, root: 'home' },
 ]
+
+function looksLikeDshSourceRoot(dir: string): boolean {
+  return existsSync(join(dir, 'AGENTS.md'))
+    && existsSync(join(dir, 'packages'))
+    && existsSync(join(dir, '.git'))
+}
+
+/** Walk from cwd / host packages to the DSH source checkout. */
+export function resolveDshSourceRoot(): string | undefined {
+  const starts = [process.cwd()]
+  try {
+    starts.push(dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-agent-instructions/package.json')))
+  } catch {
+    // packaged community installs may not resolve the host package from here
+  }
+  for (const start of starts) {
+    let dir = start
+    for (let i = 0; i < 16; i++) {
+      if (looksLikeDshSourceRoot(dir)) return dir
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+  }
+  return undefined
+}
 
 /** SHA-256 of exact UTF-8 file bytes, matching consolidator commitFile. */
 export function hashContent(content: string): string {
@@ -85,18 +118,22 @@ async function readExisting(path: string): Promise<string | undefined> {
   }
 }
 
-/** Resolve one catalog id under a harness home. */
+/** Resolve one catalog id. Home files stay under $DSH_HOME; AGENTS uses the DSH source tree. */
 export function memoryPanelFilePath(home: string, id: MemoryPanelFileId): string {
   const spec = FILES.find(file => file.id === id)
   if (spec === undefined) throw new Error(`unknown memory panel file: ${id}`)
+  if (spec.root === 'source') {
+    const source = resolveDshSourceRoot()
+    if (source !== undefined) return join(source, spec.name)
+  }
   return join(home, spec.name)
 }
 
-/** List the four home files without reading huge bodies twice. */
+/** List catalog files without reading huge bodies twice. */
 export async function listMemoryPanelFiles(home: string): Promise<MemoryPanelFileInfo[]> {
   const rows: MemoryPanelFileInfo[] = []
   for (const spec of FILES) {
-    const path = join(home, spec.name)
+    const path = memoryPanelFilePath(home, spec.id)
     if (!existsSync(path)) {
       rows.push(toInfo(spec.id, spec.name, path, undefined))
       continue
@@ -121,7 +158,7 @@ export async function readMemoryPanelFile(
 ): Promise<MemoryPanelFileContent> {
   const spec = FILES.find(file => file.id === id)
   if (spec === undefined) throw new Error(`unknown memory panel file: ${id}`)
-  const path = join(home, spec.name)
+  const path = memoryPanelFilePath(home, id)
   const content = await readExisting(path)
   const info = toInfo(spec.id, spec.name, path, content)
   const text = content ?? ''
@@ -140,7 +177,7 @@ export async function writeMemoryPanelFile(
 ): Promise<MemoryPanelWriteResult> {
   const spec = FILES.find(file => file.id === id)
   if (spec === undefined) return { ok: false, reason: 'not-found', message: `unknown file ${id}` }
-  const path = join(home, spec.name)
+  const path = memoryPanelFilePath(home, id)
   if (spec.managed && !inspectManagedRegion(content).valid) {
     return {
       ok: false,

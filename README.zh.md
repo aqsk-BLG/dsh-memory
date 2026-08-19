@@ -11,12 +11,12 @@
 预期用户已经从[官方 DeepSeek Harness 仓库](https://github.com/deepseek-ai/deepseek-harness)拉取源码并运行过 DSH，可能已经有聊天、模型／provider 设置、工作区和 `web` profile。先停止正在运行的 DSH，然后在同一份源码根目录、并确保命令继承启动 DSH 时使用的同一个 `DSH_HOME`，执行：
 
 ```sh
-pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.1
+pnpm dsh plugin --profile web add github:aqsk-BLG/dsh-memory#v1.3.2
 pnpm dsh --profile web --dump-config
 pnpm dsh web
 ```
 
-若希望跟随仓库最新提交，可去掉 `#v1.3.1`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
+若希望跟随仓库最新提交，可去掉 `#v1.3.2`；最严格的可复现部署则应把标签换成具体 commit SHA。全局安装了 CLI 的用户可以把 `pnpm dsh ...` 换成 `dsh ...`。
 
 发布到 npm 后，注册表包名为 `dsh-file-memory`：
 
@@ -24,10 +24,10 @@ pnpm dsh web
 pnpm dsh plugin --profile web add dsh-file-memory
 ```
 
-也可以从 Release 产物安装：先在 [v1.3.1 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.1) 的 assets 下载 `dsh-file-memory-1.3.1.tgz`，然后：
+也可以从 Release 产物安装：先在 [v1.3.2 release](https://github.com/aqsk-BLG/dsh-memory/releases/tag/v1.3.2) 的 assets 下载 `dsh-file-memory-1.3.2.tgz`，然后：
 
 ```sh
-pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.1.tgz
+pnpm dsh plugin --profile web add ./dsh-file-memory-1.3.2.tgz
 ```
 
 > **命名说明。**自 v1.2.1 起本包以 **`dsh-file-memory`** 发布。npm 上的 `dsh-memory` 是另一个无关的包——请勿误装。
@@ -68,7 +68,7 @@ pnpm dsh plugin --profile web remove dsh-file-memory
 v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/bootstrap`、`memory/consolidation-request`、`memory/consolidation-result`）。v1.1.0 已改为文件化状态，v1.2.0 沿用该模型。升级步骤：
 
 1. 停止 DSH。
-2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.3.1`）；若暂不升级插件，也可只执行下面的旧事件清理。
+2. 安装新标签（`github:aqsk-BLG/dsh-memory#v1.3.2`）；若暂不升级插件，也可只执行下面的旧事件清理。
 3. 旧事件被标记为可忽略或删除前，原版 harness 无法重新打开 v1.0.x 日志。停止 DSH 后执行：
 
    ```sh
@@ -90,7 +90,7 @@ v1.0.x 会写入四个自定义会话事件（`memory/bootstrap`、`persona/boot
 - **后台记忆巩固器**：每个有效任务完成并进入空闲态后立即审核，通过冲突检查写入有界受管区块，并且只为仍然绑定的工作区幂等追加每日日志。问候和短问答会跳过；更大的批处理节奏仍可作为可选成本控制。破坏性重写被守卫拦截时，会保留旧条目并写入预算内的安全新增项；可重试的混合结果不会推进水位线，畸形受管区等待修复，瞬时失败采用退避。水位线与重试控制基于文件持久化（见下方“持久化模型”）。
 - **混合会话搜索**：有模型路由时对有界既往会话 surface 进行语义排序，大型锦标赛允许合法空分片，并提供明确标注的全文回退。
 - **压缩后 flush**：压缩后排入提醒，把重要上下文写入当前允许的记忆层。
-- **设置卡**：挂在官方 `memory` 命名空间的插件配置卡（状态、四个核心文件、常用开关）。文件保存立刻落盘；开关写入官方设置文档，下次启动 DSH 生效。
+- **设置卡**：挂在官方 `memory` 命名空间的插件配置卡（状态、AGENTS / SOUL / IDENTITY / USER / MEMORY、常用开关）。AGENTS 映射本体仓库根文件。文件保存立刻落盘；开关写入官方设置文档，下次启动 DSH 生效。
 - 随包的 `memory` runtime skill：说明文件职责、该记录和跳过什么、仅追加每日日志、语义回忆与 30 天蒸馏规则。项目或 preset 可用同名 skill 覆盖它。
 
 独立构建会把五项能力编译进同一个 `lib/index.js`，运行时只把 DSH 主程序包作为 peer。人格文件在内部仍是独立身份关注点，只是 facade 将它与记忆一并安装。

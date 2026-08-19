@@ -14,9 +14,12 @@ const required = [
   'consolidationMode',
   'settingsScope',
   'IDENTITY',
+  'AGENTS',
   'MEMORY',
   'locale.register',
   'role: "switch"',
+  'role: "tablist"',
+  'aria-selected',
   'aria-expanded',
 ]
 
@@ -30,7 +33,7 @@ if (!client.includes('return module.exports; } });')) {
   throw new Error('client bundle is not the ModuleLoader factory artifact')
 }
 
-const forbidden = ['HEARTBEAT.md', 'AGENTS.md', '--dsw-openclaw', 'openclaw']
+const forbidden = ['HEARTBEAT.md', '--dsw-openclaw', 'openclaw']
 for (const marker of forbidden) {
   if (client.toLowerCase().includes(marker.toLowerCase())) {
     throw new Error(`client bundle must not mention ${marker}`)

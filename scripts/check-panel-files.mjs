@@ -34,8 +34,17 @@ if (!client.includes("namespace: 'memory'") || !client.includes('settingsScope.b
 if (!card.includes('reminderEnabled') || !card.includes('consolidationMode') || !card.includes('expectedHash')) {
   throw new Error('card must expose common knobs and guarded file save')
 }
-if (source.includes("id: 'agents'") || source.includes('HEARTBEAT.md') || source.includes('AGENTS.md')) {
-  throw new Error('panel must not expose OpenClaw-only core files')
+if (source.includes('HEARTBEAT.md')) {
+  throw new Error('panel must not expose OpenClaw HEARTBEAT.md')
+}
+if (!source.includes("id: 'agents'") || !source.includes('AGENTS.md')) {
+  throw new Error('panel must expose AGENTS.md')
+}
+if (/id: 'tools'|name: 'TOOLS\.md'/.test(source)) {
+  throw new Error('panel must not expose a tools file tab')
+}
+if (!source.includes('resolveDshSourceRoot') || !source.includes("root: 'source'")) {
+  throw new Error('AGENTS must map the DSH source tree, not only $DSH_HOME')
 }
 
-console.log('panel-files keep managed-region + hash lock; settings namespace is memory; no OpenClaw file set')
+console.log('panel-files keep managed-region + hash lock; settings namespace is memory; AGENTS maps source tree')

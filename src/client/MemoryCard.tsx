@@ -5,7 +5,7 @@ import {
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { en, type MemoryLocaleKey } from './locales.ts'
 
-type FileId = 'identity' | 'soul' | 'user' | 'memory'
+type FileId = 'agents' | 'soul' | 'identity' | 'user' | 'memory'
 type KnobKey = keyof MemoryPanelSettings
 type Draft = Partial<{ [K in KnobKey]: MemoryPanelSettings[K] | undefined }>
 
@@ -64,8 +64,9 @@ export interface MemoryCardProps {
 
 const API = '/api/plugins/dsh-file-memory'
 const FILES: { id: FileId, label: string }[] = [
-  { id: 'identity', label: 'IDENTITY' },
+  { id: 'agents', label: 'AGENTS' },
   { id: 'soul', label: 'SOUL' },
+  { id: 'identity', label: 'IDENTITY' },
   { id: 'user', label: 'USER' },
   { id: 'memory', label: 'MEMORY' },
 ]
@@ -210,6 +211,25 @@ const input: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.5,
   color: 'var(--dsw-alias-label-primary)',
+}
+const tabs: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'flex-end',
+  gap: 22,
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
+}
+const tabBase: CSSProperties = {
+  appearance: 'none',
+  position: 'relative',
+  border: 0,
+  marginBottom: -1,
+  padding: '7px 1px 9px',
+  background: 'transparent',
+  font: 'inherit',
+  fontSize: 13,
+  lineHeight: '20px',
+  cursor: 'pointer',
 }
 const area: CSSProperties = {
   ...input,
@@ -487,18 +507,36 @@ export function MemoryCard(props: MemoryCardProps): ReactNode {
             <div style={field}>
               <div style={fieldHead}><span style={label}>{t('filesTitle')}</span></div>
               <p style={hint}>{t('filesHint')}</p>
-              <select
-                style={input}
-                value={active}
-                onChange={event => { void loadFile(event.target.value as FileId) }}
-              >
-                {FILES.map(file => (
-                  <option key={file.id} value={file.id}>
-                    {file.label}
-                    {status?.files.find(item => item.id === file.id)?.exists ? '' : ` · ${t('missing')}`}
-                  </option>
-                ))}
-              </select>
+              <div role="tablist" aria-label={t('filesTitle')} style={tabs}>
+                {FILES.map(file => {
+                  const selected = file.id === active
+                  const missing = status?.files.find(item => item.id === file.id)?.exists === false
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      data-active={selected ? 'true' : 'false'}
+                      style={{
+                        ...tabBase,
+                        color: selected
+                          ? 'var(--dsw-alias-label-primary)'
+                          : 'var(--dsw-alias-label-tertiary)',
+                        boxShadow: selected
+                          ? 'inset 0 -2px 0 var(--dsw-alias-label-primary)'
+                          : 'inset 0 -2px 0 transparent',
+                      }}
+                      onClick={() => {
+                        if (file.id !== active) setActive(file.id)
+                      }}
+                    >
+                      {file.label}
+                      {missing ? ` · ${t('missing')}` : ''}
+                    </button>
+                  )
+                })}
+              </div>
               <p style={hint}>
                 {info?.path ?? ''}
                 {info?.managed === 'malformed' ? ` · ${t('malformed')}` : ''}

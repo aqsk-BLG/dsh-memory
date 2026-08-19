@@ -61,8 +61,8 @@ for (const [name, text] of [['README.md', readme], ['README.zh.md', readmeZh]]) 
 }
 
 // The manifest version must stay in sync with the release being cut.
-if (!packageJson.includes('"version": "1.3.1"')) {
-  throw new Error('package.json version is not 1.3.1')
+if (!packageJson.includes('"version": "1.3.2"')) {
+  throw new Error('package.json version is not 1.3.2')
 }
 
 console.log('host version gate, first-run seeding, and version documentation are all in place')

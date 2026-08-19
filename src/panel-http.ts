@@ -15,7 +15,7 @@ import { readMemoryPanelStatus } from './panel-status.ts'
 /** Prefix owned by this plugin. */
 export const MEMORY_PANEL_API_PREFIX = '/api/plugins/dsh-file-memory'
 
-const FILE_IDS = new Set<MemoryPanelFileId>(['identity', 'soul', 'user', 'memory'])
+const FILE_IDS = new Set<MemoryPanelFileId>(['agents', 'soul', 'identity', 'user', 'memory'])
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body)
