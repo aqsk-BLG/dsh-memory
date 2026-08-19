@@ -1,5 +1,7 @@
 # dsh-file-memory
 
+[![banner](docs/assets/banner.png)](https://www.npmjs.com/package/dsh-file-memory)
+
 [English](README.md) | 中文
 
 可安装到 DSH profile 的 WorkBuddy 风格分层记忆 bundle：全局人格与记忆文件、显式绑定工作区的实时记忆、可跳过提醒与后台整理、混合会话回忆、压缩后 flush，以及随包分发的使用 skill（技能）。本仓库是 DeepSeek Harness 源码实现的独立 Git 发行版。自 v1.2.1 起，包名发布为 `dsh-file-memory`。

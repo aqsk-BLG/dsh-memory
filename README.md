@@ -1,5 +1,7 @@
 # dsh-file-memory
 
+[![banner](docs/assets/banner.png)](https://www.npmjs.com/package/dsh-file-memory)
+
 English | [中文](README.zh.md)
 
 An installable DSH profile bundle for WorkBuddy-style layered memory: global persona and memory files, live explicitly bound workspace memory, skip-aware reminders and background consolidation, hybrid session recall, post-compaction flush, and a bundled usage skill. This repository is the standalone Git distribution of the implementation developed in DeepSeek Harness. Since v1.2.1 the package is published as `dsh-file-memory`.
