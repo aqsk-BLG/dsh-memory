@@ -41,6 +41,10 @@
     "type": "git",
     "url": "git+https://github.com/aqsk-BLG/dsh-memory.git"
   },
+  "homepage": "https://github.com/aqsk-BLG/dsh-memory#readme",
+  "bugs": {
+    "url": "https://github.com/aqsk-BLG/dsh-memory/issues"
+  },
   "keywords": [
     "deepseek-harness",
     "dsh",
